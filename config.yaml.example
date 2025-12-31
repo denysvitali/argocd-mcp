@@ -29,6 +29,16 @@ server:
   # MCP endpoint type: stdio or sse (default: stdio)
   mcp_endpoint: "stdio"
 
+  # Safe mode - restricts write operations for security
+  # When enabled, only read operations are allowed:
+  # - list_applications, get_application, get_application_manifests, get_application_events
+  # - list_projects, get_project, get_project_events
+  # - list_repositories, get_repository, validate_repository
+  # - list_clusters, get_cluster
+  # Sync operations are allowed but prune is disabled
+  # (default: false)
+  # safe_mode: false
+
 # Logging Configuration
 logging:
   # Log level: debug, info, warn, error (default: info)

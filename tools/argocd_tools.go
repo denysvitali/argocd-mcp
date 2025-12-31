@@ -20,17 +20,19 @@ import (
 
 // ToolManager manages the MCP tools for ArgoCD
 type ToolManager struct {
-	client *client.Client
-	logger *logrus.Logger
-	tools  []mcp.Tool
+	client    *client.Client
+	logger    *logrus.Logger
+	tools     []mcp.Tool
+	safeMode  bool
 }
 
 // NewToolManager creates a new tool manager
-func NewToolManager(client *client.Client, logger *logrus.Logger) *ToolManager {
+func NewToolManager(client *client.Client, logger *logrus.Logger, safeMode bool) *ToolManager {
 	return &ToolManager{
-		client: client,
-		logger: logger,
-		tools:  []mcp.Tool{},
+		client:   client,
+		logger:   logger,
+		tools:    []mcp.Tool{},
+		safeMode: safeMode,
 	}
 }
 
@@ -780,6 +782,10 @@ func (tm *ToolManager) handleGetApplication(ctx context.Context, arguments map[s
 }
 
 func (tm *ToolManager) handleCreateApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("create_application"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 	project := String(arguments, "project", "")
 	repoURL := String(arguments, "repo_url", "")
@@ -819,6 +825,10 @@ func (tm *ToolManager) handleCreateApplication(ctx context.Context, arguments ma
 }
 
 func (tm *ToolManager) handleDeleteApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("delete_application"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 	cascade := Bool(arguments, "cascade", true)
 	deleteReq := &application.ApplicationDeleteRequest{
@@ -841,10 +851,17 @@ func (tm *ToolManager) handleSyncApplication(ctx context.Context, arguments map[
 	name := String(arguments, "name", "")
 	revision := String(arguments, "revision", "")
 	prune := Bool(arguments, "prune", false)
+
+	// In safe mode, prune is not allowed
+	if tm.safeMode && prune {
+		return errorResult("sync_application with prune=true is not allowed in safe mode"), nil
+	}
+
+	pruneValue := prune
 	syncReq := &application.ApplicationSyncRequest{
 		Name:     &name,
 		Revision: &revision,
-		Prune:    &prune,
+		Prune:    &pruneValue,
 	}
 
 	app, err := tm.client.SyncApplication(ctx, syncReq)
@@ -926,6 +943,10 @@ func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments
 }
 
 func (tm *ToolManager) handleUpdateApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("update_application"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 	project := String(arguments, "project", "")
 	repoURL := String(arguments, "repo_url", "")
@@ -966,6 +987,10 @@ func (tm *ToolManager) handleUpdateApplication(ctx context.Context, arguments ma
 }
 
 func (tm *ToolManager) handleRollbackApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("rollback_application"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 
 	namePtr := &name
@@ -1013,6 +1038,10 @@ func (tm *ToolManager) handleListResourceActions(ctx context.Context, arguments 
 }
 
 func (tm *ToolManager) handleRunResourceAction(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("run_resource_action"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 	group := String(arguments, "group", "")
 	kind := String(arguments, "kind", "")
@@ -1092,6 +1121,10 @@ func (tm *ToolManager) handleGetProject(ctx context.Context, arguments map[strin
 }
 
 func (tm *ToolManager) handleCreateProject(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("create_project"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 	description := String(arguments, "description", "")
 
@@ -1119,6 +1152,10 @@ func (tm *ToolManager) handleCreateProject(ctx context.Context, arguments map[st
 }
 
 func (tm *ToolManager) handleUpdateProject(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("update_project"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 	description := String(arguments, "description", "")
 
@@ -1151,6 +1188,10 @@ func (tm *ToolManager) handleUpdateProject(ctx context.Context, arguments map[st
 }
 
 func (tm *ToolManager) handleDeleteProject(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("delete_project"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 	query := &project.ProjectQuery{Name: name}
 
@@ -1253,14 +1294,24 @@ func (tm *ToolManager) handleGetRepository(ctx context.Context, arguments map[st
 }
 
 func (tm *ToolManager) handleCreateRepository(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("create_repository"); result != nil {
+		return result, nil
+	}
 	return errorResult("Repository creation requires direct ArgoCD API interaction. Use ArgoCD CLI or UI to create repositories."), nil
 }
 
 func (tm *ToolManager) handleUpdateRepository(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("update_repository"); result != nil {
+		return result, nil
+	}
 	return errorResult("Repository update requires direct ArgoCD API interaction. Use ArgoCD CLI or UI to update repositories."), nil
 }
 
 func (tm *ToolManager) handleDeleteRepository(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("delete_repository"); result != nil {
+		return result, nil
+	}
+
 	repoURL := String(arguments, "repo_url", "")
 	query := &repository.RepoQuery{
 		Repo: repoURL,
@@ -1346,14 +1397,24 @@ func (tm *ToolManager) handleGetCluster(ctx context.Context, arguments map[strin
 }
 
 func (tm *ToolManager) handleCreateCluster(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("create_cluster"); result != nil {
+		return result, nil
+	}
 	return errorResult("Cluster creation requires direct ArgoCD API interaction. Use ArgoCD CLI or UI to create clusters."), nil
 }
 
 func (tm *ToolManager) handleUpdateCluster(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("update_cluster"); result != nil {
+		return result, nil
+	}
 	return errorResult("Cluster update requires direct ArgoCD API interaction. Use ArgoCD CLI or UI to update clusters."), nil
 }
 
 func (tm *ToolManager) handleDeleteCluster(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("delete_cluster"); result != nil {
+		return result, nil
+	}
+
 	server := String(arguments, "server", "")
 	query := &cluster.ClusterQuery{
 		Server: server,
@@ -1409,4 +1470,12 @@ func isContextCancelled(ctx context.Context, logger *logrus.Logger) bool {
 	default:
 		return false
 	}
+}
+
+// checkSafeMode returns an error result if safe mode is enabled for write operations
+func (tm *ToolManager) checkSafeMode(operation string) *mcp.CallToolResult {
+	if tm.safeMode {
+		return errorResult(fmt.Sprintf("Operation '%s' is not allowed in safe mode. Safe mode restricts write operations for security.", operation))
+	}
+	return nil
 }

@@ -244,3 +244,25 @@ func TestFormatTime(t *testing.T) {
 		})
 	}
 }
+
+func TestSafeMode(t *testing.T) {
+	// Create a tool manager with safe mode enabled
+	tmSafe := &ToolManager{safeMode: true}
+	tmUnsafe := &ToolManager{safeMode: false}
+
+	t.Run("safe mode blocks operation", func(t *testing.T) {
+		result := tmSafe.checkSafeMode("test_operation")
+		assert.NotNil(t, result)
+		assert.True(t, result.IsError)
+	})
+
+	t.Run("safe mode allows operation when disabled", func(t *testing.T) {
+		result := tmUnsafe.checkSafeMode("test_operation")
+		assert.Nil(t, result)
+	})
+
+	t.Run("safe mode is set correctly", func(t *testing.T) {
+		assert.True(t, tmSafe.safeMode)
+		assert.False(t, tmUnsafe.safeMode)
+	})
+}

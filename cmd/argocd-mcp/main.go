@@ -100,7 +100,7 @@ The server communicates over stdio by default.`,
 			}
 
 			// Create tool manager
-			toolManager := tools.NewToolManager(argoClient, logger)
+			toolManager := tools.NewToolManager(argoClient, logger, cfg.Server.SafeMode)
 			serverTools := toolManager.GetServerTools()
 
 			// Create context that cancels on interrupt
