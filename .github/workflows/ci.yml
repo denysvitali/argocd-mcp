@@ -49,3 +49,17 @@ jobs:
       with:
         version: latest
         install-go: false
+
+    - name: Run gofmt
+      run: |
+        if [ "$(gofmt -l .)" != "" ]; then
+          echo "Files need formatting:"
+          gofmt -l .
+          exit 1
+        fi
+
+    - name: Install golangci-lint
+      run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+    - name: Run golangci-lint
+      run: golangci-lint run ./...

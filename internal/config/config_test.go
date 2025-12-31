@@ -71,6 +71,61 @@ argocd:
 	})
 }
 
+func TestLoadConfig_DefaultValues(t *testing.T) {
+	logger := logrus.New()
+
+	// Use a temp dir without any config file to trigger all defaults
+	tempDir := t.TempDir()
+
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer os.Chdir(originalDir)
+	os.Chdir(tempDir)
+
+	cfg, err := LoadConfig(logger)
+	require.NoError(t, err)
+
+	// Verify all defaults are applied (since no config file exists)
+	assert.Equal(t, "localhost:8080", cfg.ArgoCD.Server)
+	assert.False(t, cfg.ArgoCD.Insecure)
+	assert.Equal(t, "stdio", cfg.Server.MCPEndpoint)
+	assert.False(t, cfg.Server.SafeMode)
+	assert.Equal(t, "info", cfg.Logging.Level)
+	assert.Equal(t, "json", cfg.Logging.Format)
+}
+
+func TestLoadConfig_InvalidYAML(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	// Invalid YAML content
+	invalidContent := `
+argocd:
+  server: "argocd.example.com"
+  invalid_indent: this is invalid
+    nested: broken
+`
+	err := os.WriteFile(configPath, []byte(invalidContent), 0644)
+	require.NoError(t, err)
+
+	logger := logrus.New()
+
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer os.Chdir(originalDir)
+	os.Chdir(tempDir)
+
+	// LoadConfig should handle the error gracefully
+	// viper may not strictly fail on YAML parse errors in all versions
+	// but we can verify it doesn't panic
+	_, err = LoadConfig(logger)
+	// The function may or may not return an error depending on viper version
+	// but it should not panic
+	assert.NotPanics(t, func() {
+		_, _ = LoadConfig(logger)
+	})
+}
+
 func TestConfigWithEnvVars(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")

@@ -5,17 +5,19 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
-	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
 	"github.com/argocd-mcp/argocd-mcp/internal/auth"
 	"github.com/argocd-mcp/argocd-mcp/internal/client"
 	"github.com/argocd-mcp/argocd-mcp/internal/config"
 	"github.com/argocd-mcp/argocd-mcp/tools"
+	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -70,6 +72,7 @@ The server communicates over stdio by default.`,
 			// Set log level
 			logLevel, err := logrus.ParseLevel(cfg.Logging.Level)
 			if err != nil {
+				logger.Warnf("Invalid log level '%s', using default 'info': %v", cfg.Logging.Level, err)
 				logLevel = logrus.InfoLevel
 			}
 			logger.SetLevel(logLevel)
@@ -148,9 +151,48 @@ The server communicates over stdio by default.`,
 			var password string
 			fmt.Scanln(&password)
 
-			auth.PrintInfo("Configuration saved to ~/.config/argocd-mcp/config.yaml")
+			// Create config structure
+			cfg := config.Config{
+				ArgoCD: config.ArgoCDConfig{
+					Server:   server,
+					Username: username,
+					Password: password,
+				},
+				Server: config.ServerConfig{
+					MCPEndpoint: "stdio",
+					SafeMode:    false,
+				},
+				Logging: config.LoggingConfig{
+					Level:  "info",
+					Format: "json",
+				},
+			}
+
+			// Create config directory
+			configDir := filepath.Join(os.Getenv("HOME"), ".config", "argocd-mcp")
+			if err := os.MkdirAll(configDir, 0755); err != nil {
+				auth.PrintError(fmt.Sprintf("Failed to create config directory: %v", err))
+				return
+			}
+
+			// Save config file
+			configPath := filepath.Join(configDir, "config.yaml")
+			data, err := yaml.Marshal(cfg)
+			if err != nil {
+				auth.PrintError(fmt.Sprintf("Failed to marshal config: %v", err))
+				return
+			}
+
+			if err := os.WriteFile(configPath, data, 0600); err != nil {
+				auth.PrintError(fmt.Sprintf("Failed to write config file: %v", err))
+				return
+			}
+
+			auth.PrintSuccess("Configuration saved to " + configPath)
 			auth.PrintInfo(fmt.Sprintf("Server: %s", server))
-			auth.PrintInfo(fmt.Sprintf("Username: %s", username))
+			if username != "" {
+				auth.PrintInfo(fmt.Sprintf("Username: %s", username))
+			}
 		},
 	}
 

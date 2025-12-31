@@ -173,11 +173,11 @@ func IsContextCancelled(ctx context.Context, logger *logrus.Logger) bool {
 func ProtoToMap(msg interface{}) (map[string]interface{}, error) {
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal protobuf: %w", err)
 	}
 	var result map[string]interface{}
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 	return result, nil
 }
@@ -186,11 +186,11 @@ func ProtoToMap(msg interface{}) (map[string]interface{}, error) {
 func ProtoToInterfaceList(items interface{}) ([]interface{}, error) {
 	data, err := json.Marshal(items)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal protobuf: %w", err)
 	}
 	var result []interface{}
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 	return result, nil
 }

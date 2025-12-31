@@ -6,24 +6,30 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/argocd-mcp/argocd-mcp/internal/client"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/cluster"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/project"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
-	"github.com/argocd-mcp/argocd-mcp/internal/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Default timeout and retry constants
+const (
+	defaultSyncTimeout = 60 * time.Second
+	defaultRetryCount  = 3
+)
+
 // ToolManager manages the MCP tools for ArgoCD
 type ToolManager struct {
-	client    *client.Client
-	logger    *logrus.Logger
-	tools     []mcp.Tool
-	safeMode  bool
+	client   *client.Client
+	logger   *logrus.Logger
+	tools    []mcp.Tool
+	safeMode bool
 }
 
 // NewToolManager creates a new tool manager
@@ -671,11 +677,7 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return errorResult("Invalid arguments format"), nil
 		}
 
-		if isContextCancelled(ctx, tm.logger) {
-			return errorResult("Context cancelled"), nil
-		}
-
-		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, defaultSyncTimeout)
 		defer cancel()
 
 		switch name {
@@ -870,10 +872,10 @@ func (tm *ToolManager) handleSyncApplication(ctx context.Context, arguments map[
 	}
 
 	return Result(map[string]interface{}{
-		"message":   fmt.Sprintf("Application %s sync initiated", name),
-		"status":    app.Status.Sync.Status,
-		"health":    app.Status.Health.Status,
-		"revision":  app.Status.Sync.Revision,
+		"message":  fmt.Sprintf("Application %s sync initiated", name),
+		"status":   app.Status.Sync.Status,
+		"health":   app.Status.Health.Status,
+		"revision": app.Status.Sync.Revision,
 	}, nil)
 }
 
@@ -907,19 +909,9 @@ func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments
 		return errorResult(err.Error()), nil
 	}
 
-	// Convert interface{} to []interface{}
-	events, ok := eventsRaw.([]interface{})
-	if !ok {
-		// Try to convert using JSON marshal/unmarshal
-		data, jsonErr := json.Marshal(eventsRaw)
-		if jsonErr != nil {
-			return errorResult(fmt.Sprintf("Failed to parse events: %v", jsonErr)), nil
-		}
-		var parsed []interface{}
-		if jsonErr := json.Unmarshal(data, &parsed); jsonErr != nil {
-			return errorResult(fmt.Sprintf("Failed to parse events: %v", jsonErr)), nil
-		}
-		events = parsed
+	events, parseErr := parseEvents(eventsRaw)
+	if parseErr != nil {
+		return errorResult(fmt.Sprintf("Failed to parse events: %v", parseErr)), nil
 	}
 
 	eventList := make([]interface{}, len(events))
@@ -1115,10 +1107,10 @@ func (tm *ToolManager) handleGetProject(ctx context.Context, arguments map[strin
 	}
 
 	return Result(map[string]interface{}{
-		"name":               proj.Name,
-		"description":        proj.Spec.Description,
-		"source_repos":       proj.Spec.SourceRepos,
-		"destinations":       proj.Spec.Destinations,
+		"name":         proj.Name,
+		"description":  proj.Spec.Description,
+		"source_repos": proj.Spec.SourceRepos,
+		"destinations": proj.Spec.Destinations,
 	}, nil)
 }
 
@@ -1217,17 +1209,9 @@ func (tm *ToolManager) handleGetProjectEvents(ctx context.Context, arguments map
 		return errorResult(err.Error()), nil
 	}
 
-	events, ok := eventsRaw.([]interface{})
-	if !ok {
-		data, jsonErr := json.Marshal(eventsRaw)
-		if jsonErr != nil {
-			return errorResult(fmt.Sprintf("Failed to parse events: %v", jsonErr)), nil
-		}
-		var parsed []interface{}
-		if jsonErr := json.Unmarshal(data, &parsed); jsonErr != nil {
-			return errorResult(fmt.Sprintf("Failed to parse events: %v", jsonErr)), nil
-		}
-		events = parsed
+	events, parseErr := parseEvents(eventsRaw)
+	if parseErr != nil {
+		return errorResult(fmt.Sprintf("Failed to parse events: %v", parseErr)), nil
 	}
 
 	eventList := make([]interface{}, len(events))
@@ -1339,10 +1323,10 @@ func (tm *ToolManager) handleValidateRepository(ctx context.Context, arguments m
 	err := tm.client.ValidateRepositoryAccess(ctx, query)
 	if err != nil {
 		return Result(map[string]interface{}{
-			"repo":     repoURL,
-			"valid":    false,
-			"message":  err.Error(),
-			"success":  false,
+			"repo":    repoURL,
+			"valid":   false,
+			"message": err.Error(),
+			"success": false,
 		}, nil)
 	}
 
@@ -1438,6 +1422,33 @@ func (tm *ToolManager) handleDeleteCluster(ctx context.Context, arguments map[st
 
 // Helper functions
 
+// parseEvents converts interface{} to []interface{} with proper type handling
+func parseEvents(eventsRaw interface{}) ([]interface{}, error) {
+	events, ok := eventsRaw.([]interface{})
+	if !ok {
+		// Try JSON unmarshal fallback
+		data, err := json.Marshal(eventsRaw)
+		if err != nil {
+			return nil, err
+		}
+		var parsed []interface{}
+		if err := json.Unmarshal(data, &parsed); err != nil {
+			return nil, err
+		}
+		events = parsed
+	}
+
+	result := make([]interface{}, 0, len(events))
+	for _, event := range events {
+		eventMap, ok := event.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		result = append(result, eventMap)
+	}
+	return result, nil
+}
+
 func formatApplicationSummary(app *v1alpha1.Application) map[string]interface{} {
 	return map[string]interface{}{
 		"name":      app.Name,
@@ -1465,18 +1476,6 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 		"health":          app.Status.Health.Status,
 		"health_message":  healthMessage,
 		"revision":        app.Status.Sync.Revision,
-	}
-}
-
-func isContextCancelled(ctx context.Context, logger *logrus.Logger) bool {
-	select {
-	case <-ctx.Done():
-		if ctx.Err() != nil {
-			logger.Debugf("Context cancelled: %v", ctx.Err())
-		}
-		return true
-	default:
-		return false
 	}
 }
 

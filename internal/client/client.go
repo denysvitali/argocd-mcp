@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +15,16 @@ import (
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
+)
+
+// Rate limiting constants
+const (
+	rateLimitRequests = 10
+	rateLimitBurst    = 20
+)
+
+var (
+	ErrRateLimitExceeded = errors.New("rate limit exceeded")
 )
 
 // Client wraps the ArgoCD API client with additional functionality
@@ -39,7 +50,7 @@ func NewClient(logger *logrus.Logger, server, token string, insecure bool, certF
 	}
 
 	// Rate limiter: 10 requests per second with burst of 20
-	limiter := rate.NewLimiter(10, 20)
+	limiter := rate.NewLimiter(rateLimitRequests, rateLimitBurst)
 
 	return &Client{
 		client:  argoClient,
@@ -161,7 +172,7 @@ func (c *Client) GetApplicationManifests(ctx context.Context, query *application
 
 	resp, err := appClient.GetManifests(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get application manifests: %w", err)
 	}
 	return resp.Manifests, nil
 }
@@ -210,12 +221,13 @@ func (c *Client) ListResourceActions(ctx context.Context, query *application.App
 
 	resp, err := appClient.ListResourceActions(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list resource actions: %w", err)
 	}
 	return resp.Actions, nil
 }
 
 // RunResourceAction runs an action on a resource
+//
 //lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
 func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error {
 	if err := c.WaitForRateLimit(ctx); err != nil {
@@ -231,7 +243,10 @@ func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.R
 	// RunResourceAction is deprecated but we need to use it for backward compatibility
 	//lint:ignore SA1019 RunResourceAction is deprecated but required for resource action execution
 	_, err = appClient.RunResourceAction(ctx, actionReq)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to run resource action: %w", err)
+	}
+	return nil
 }
 
 // Project client methods
@@ -309,7 +324,10 @@ func (c *Client) DeleteProject(ctx context.Context, query *project.ProjectQuery)
 	defer closer.Close()
 
 	_, err = projectClient.Delete(ctx, query)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to delete project: %w", err)
+	}
+	return nil
 }
 
 // GetProjectEvents returns events for a project
@@ -402,7 +420,10 @@ func (c *Client) DeleteRepository(ctx context.Context, query *repository.RepoQue
 	defer closer.Close()
 
 	_, err = repoClient.Delete(ctx, query)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to delete repository: %w", err)
+	}
+	return nil
 }
 
 // ValidateRepositoryAccess validates access to a repository
@@ -418,7 +439,10 @@ func (c *Client) ValidateRepositoryAccess(ctx context.Context, query *repository
 	defer closer.Close()
 
 	_, err = repoClient.ValidateAccess(ctx, query)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to validate repository: %w", err)
+	}
+	return nil
 }
 
 // Cluster client methods
@@ -496,7 +520,10 @@ func (c *Client) DeleteCluster(ctx context.Context, query *cluster.ClusterQuery)
 	defer closer.Close()
 
 	_, err = clusterClient.Delete(ctx, query)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to delete cluster: %w", err)
+	}
+	return nil
 }
 
 // Account client methods
@@ -530,7 +557,7 @@ func (c *Client) CanI(ctx context.Context, action, scope string) (string, error)
 
 	resp, err := accountClient.CanI(ctx, &account.CanIRequest{Action: action, Resource: scope})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to check permissions: %w", err)
 	}
 	return resp.Value, nil
 }

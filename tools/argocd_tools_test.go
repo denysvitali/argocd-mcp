@@ -235,6 +235,21 @@ func TestFormatTime(t *testing.T) {
 			seconds:  120,
 			expected: "120 seconds ago",
 		},
+		{
+			name:     "large value",
+			seconds:  3600,
+			expected: "3600 seconds ago",
+		},
+		{
+			name:     "one hour",
+			seconds:  3600,
+			expected: "3600 seconds ago",
+		},
+		{
+			name:     "one day",
+			seconds:  86400,
+			expected: "86400 seconds ago",
+		},
 	}
 
 	for _, tt := range tests {
