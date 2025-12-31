@@ -1,0 +1,38 @@
+# ArgoCD MCP Configuration
+# ~/.config/argocd-mcp/config.yaml
+
+# ArgoCD Server Configuration
+argocd:
+  # ArgoCD server address (default: localhost:8080)
+  server: "localhost:8080"
+
+  # Authentication URL (optional, for SSO)
+  # auth_url: "https://argocd.example.com/auth/login"
+
+  # Username for authentication (optional, if using token)
+  # username: "admin"
+
+  # Password for authentication (optional, if using token)
+  # password: "your-password"
+
+  # Authentication token (optional, can be obtained via username/password)
+  # token: "your-auth-token"
+
+  # Skip TLS certificate verification (default: false)
+  # insecure: false
+
+  # Path to TLS certificate file (optional)
+  # cert_file: ""
+
+# Server Configuration
+server:
+  # MCP endpoint type: stdio or sse (default: stdio)
+  mcp_endpoint: "stdio"
+
+# Logging Configuration
+logging:
+  # Log level: debug, info, warn, error (default: info)
+  level: "info"
+
+  # Log format: json or text (default: json)
+  # format: "json"
