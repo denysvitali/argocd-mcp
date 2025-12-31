@@ -216,6 +216,7 @@ func (c *Client) ListResourceActions(ctx context.Context, query *application.App
 }
 
 // RunResourceAction runs an action on a resource
+//nolint:staticcheck
 func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error {
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
@@ -227,7 +228,7 @@ func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.R
 	}
 	defer closer.Close()
 
-	_, err = appClient.RunResourceAction(ctx, actionReq)
+	_, err = appClient.RunResourceAction(ctx, actionReq) //nolint:staticcheck
 	return err
 }
 

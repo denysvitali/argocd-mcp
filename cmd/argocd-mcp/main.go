@@ -148,7 +148,7 @@ The server communicates over stdio by default.`,
 			var password string
 			fmt.Scanln(&password)
 
-			auth.PrintInfo(fmt.Sprintf("Configuration saved to ~/.config/argocd-mcp/config.yaml"))
+			auth.PrintInfo("Configuration saved to ~/.config/argocd-mcp/config.yaml")
 			auth.PrintInfo(fmt.Sprintf("Server: %s", server))
 			auth.PrintInfo(fmt.Sprintf("Username: %s", username))
 		},
