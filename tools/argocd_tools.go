@@ -1056,7 +1056,8 @@ func (tm *ToolManager) handleRunResourceAction(ctx context.Context, arguments ma
 	resourceNamePtr := &resourceName
 	actionPtr := &action
 
-	actionReq := &application.ResourceActionRunRequest{ //nolint:staticcheck
+	//nolint:staticcheck
+	actionReq := &application.ResourceActionRunRequest{
 		Name:         namePtr,
 		Group:        groupPtr,
 		Kind:         kindPtr,
@@ -1388,11 +1389,13 @@ func (tm *ToolManager) handleGetCluster(ctx context.Context, arguments map[strin
 		return errorResult(err.Error()), nil
 	}
 
+	//nolint:staticcheck
+	connectionState := c.ConnectionState
 	return Result(map[string]interface{}{
 		"server":           c.Server,
 		"name":             c.Name,
 		"config":           c.Config,
-		"connection_state": c.ConnectionState, //nolint:staticcheck
+		"connection_state": connectionState,
 	}, nil)
 }
 
@@ -1455,7 +1458,8 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 		"namespace":       app.Spec.Destination.Namespace,
 		"status":          app.Status.Sync.Status,
 		"health":          app.Status.Health.Status,
-		"health_message":  app.Status.Health.Message, //nolint:staticcheck
+		//nolint:staticcheck
+		"health_message":  app.Status.Health.Message,
 		"revision":        app.Status.Sync.Revision,
 	}
 }
