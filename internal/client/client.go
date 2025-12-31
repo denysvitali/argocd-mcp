@@ -216,7 +216,8 @@ func (c *Client) ListResourceActions(ctx context.Context, query *application.App
 }
 
 // RunResourceAction runs an action on a resource
-func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error { //nolint:staticcheck
+//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
+func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error {
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
@@ -227,7 +228,8 @@ func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.R
 	}
 	defer closer.Close()
 
-	//nolint:staticcheck
+	// RunResourceAction is deprecated but we need to use it for backward compatibility
+	//lint:ignore SA1019 RunResourceAction is deprecated but required for resource action execution
 	_, err = appClient.RunResourceAction(ctx, actionReq)
 	return err
 }

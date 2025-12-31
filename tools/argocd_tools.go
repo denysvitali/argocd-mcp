@@ -1056,7 +1056,8 @@ func (tm *ToolManager) handleRunResourceAction(ctx context.Context, arguments ma
 	resourceNamePtr := &resourceName
 	actionPtr := &action
 
-	//nolint:staticcheck
+	// Create resource action request using deprecated type
+	//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for resource action execution
 	actionReq := &application.ResourceActionRunRequest{
 		Name:         namePtr,
 		Group:        groupPtr,
@@ -1389,7 +1390,8 @@ func (tm *ToolManager) handleGetCluster(ctx context.Context, arguments map[strin
 		return errorResult(err.Error()), nil
 	}
 
-	//nolint:staticcheck
+	// ConnectionState is deprecated but we need to use it for backward compatibility
+	//lint:ignore SA1019 ConnectionState is deprecated
 	connectionState := c.ConnectionState
 	return Result(map[string]interface{}{
 		"server":           c.Server,
@@ -1448,6 +1450,9 @@ func formatApplicationSummary(app *v1alpha1.Application) map[string]interface{} 
 }
 
 func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
+	// Health.Message is deprecated but we still use it for backward compatibility
+	//lint:ignore SA1019 Health.Message is deprecated
+	healthMessage := app.Status.Health.Message
 	return map[string]interface{}{
 		"name":            app.Name,
 		"project":         app.Spec.Project,
@@ -1458,8 +1463,7 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 		"namespace":       app.Spec.Destination.Namespace,
 		"status":          app.Status.Sync.Status,
 		"health":          app.Status.Health.Status,
-		//nolint:staticcheck
-		"health_message":  app.Status.Health.Message,
+		"health_message":  healthMessage,
 		"revision":        app.Status.Sync.Revision,
 	}
 }
