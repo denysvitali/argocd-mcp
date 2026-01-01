@@ -304,6 +304,112 @@ func (tm *ToolManager) defineTools() {
 				Required: []string{"name", "group", "kind", "resource_name", "action"},
 			},
 		},
+		{
+			Name:        "get_application_resource",
+			Description: "Get details of a specific resource in an application",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+					"group": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource group (e.g., apps, core)",
+					},
+					"kind": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource kind (e.g., Deployment, Pod)",
+					},
+					"namespace": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource namespace",
+					},
+					"resource_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource name (required)",
+					},
+				},
+				Required: []string{"name", "kind", "resource_name"},
+			},
+		},
+		{
+			Name:        "patch_application_resource",
+			Description: "Patch a resource in an application using JSON patch",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+					"group": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource group (e.g., apps, core)",
+					},
+					"kind": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource kind (e.g., Deployment, Pod)",
+					},
+					"namespace": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource namespace",
+					},
+					"resource_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource name (required)",
+					},
+					"patch": map[string]interface{}{
+						"type":        "string",
+						"description": "JSON patch to apply (required)",
+					},
+					"patch_type": map[string]interface{}{
+						"type":        "string",
+						"description": "Patch type: merge, json, or strategic (default: merge)",
+					},
+				},
+				Required: []string{"name", "kind", "resource_name", "patch"},
+			},
+		},
+		{
+			Name:        "delete_application_resource",
+			Description: "Delete a resource from an application",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+					"group": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource group (e.g., apps, core)",
+					},
+					"kind": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource kind (e.g., Deployment, Pod)",
+					},
+					"namespace": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource namespace",
+					},
+					"resource_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource name (required)",
+					},
+					"force": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Force deletion (default: false)",
+					},
+					"orphan": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Orphan the resource (default: false)",
+					},
+				},
+				Required: []string{"name", "kind", "resource_name"},
+			},
+		},
 		// Project tools
 		{
 			Name:        "list_projects",
@@ -703,6 +809,12 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return tm.handleListResourceActions(ctx, arguments)
 		case "run_resource_action":
 			return tm.handleRunResourceAction(ctx, arguments)
+		case "get_application_resource":
+			return tm.handleGetApplicationResource(ctx, arguments)
+		case "patch_application_resource":
+			return tm.handlePatchApplicationResource(ctx, arguments)
+		case "delete_application_resource":
+			return tm.handleDeleteApplicationResource(ctx, arguments)
 		case "list_projects":
 			return tm.handleListProjects(ctx, arguments)
 		case "get_project":
@@ -1070,6 +1182,126 @@ func (tm *ToolManager) handleRunResourceAction(ctx context.Context, arguments ma
 	}, nil)
 }
 
+func (tm *ToolManager) handleGetApplicationResource(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	name := String(arguments, "name", "")
+	group := String(arguments, "group", "")
+	kind := String(arguments, "kind", "")
+	namespace := String(arguments, "namespace", "")
+	resourceName := String(arguments, "resource_name", "")
+
+	namePtr := &name
+	groupPtr := &group
+	kindPtr := &kind
+	namespacePtr := &namespace
+	resourceNamePtr := &resourceName
+
+	resourceReq := &application.ApplicationResourceRequest{
+		Name:         namePtr,
+		ResourceName: resourceNamePtr,
+		Version:      namePtr, // Use app name as version for resource lookup
+		Group:        groupPtr,
+		Kind:         kindPtr,
+		Namespace:    namespacePtr,
+	}
+
+	resource, err := tm.client.GetApplicationResource(ctx, resourceReq)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	return Result(map[string]interface{}{
+		"resource": resource,
+		"success":  true,
+	}, nil)
+}
+
+func (tm *ToolManager) handlePatchApplicationResource(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("patch_application_resource"); result != nil {
+		return result, nil
+	}
+
+	name := String(arguments, "name", "")
+	group := String(arguments, "group", "")
+	kind := String(arguments, "kind", "")
+	namespace := String(arguments, "namespace", "")
+	resourceName := String(arguments, "resource_name", "")
+	patch := String(arguments, "patch", "")
+	patchType := String(arguments, "patch_type", "merge")
+
+	namePtr := &name
+	groupPtr := &group
+	kindPtr := &kind
+	namespacePtr := &namespace
+	resourceNamePtr := &resourceName
+	patchPtr := &patch
+	patchTypePtr := &patchType
+
+	patchReq := &application.ApplicationResourcePatchRequest{
+		Name:         namePtr,
+		ResourceName: resourceNamePtr,
+		Version:      namePtr, // Use app name as version for resource lookup
+		Group:        groupPtr,
+		Kind:         kindPtr,
+		Namespace:    namespacePtr,
+		Patch:        patchPtr,
+		PatchType:    patchTypePtr,
+	}
+
+	resource, err := tm.client.PatchApplicationResource(ctx, patchReq)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	return Result(map[string]interface{}{
+		"resource": resource,
+		"message":  fmt.Sprintf("Resource %s/%s patched successfully", kind, resourceName),
+		"success":  true,
+	}, nil)
+}
+
+func (tm *ToolManager) handleDeleteApplicationResource(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("delete_application_resource"); result != nil {
+		return result, nil
+	}
+
+	name := String(arguments, "name", "")
+	group := String(arguments, "group", "")
+	kind := String(arguments, "kind", "")
+	namespace := String(arguments, "namespace", "")
+	resourceName := String(arguments, "resource_name", "")
+	force := Bool(arguments, "force", false)
+	orphan := Bool(arguments, "orphan", false)
+
+	namePtr := &name
+	groupPtr := &group
+	kindPtr := &kind
+	namespacePtr := &namespace
+	resourceNamePtr := &resourceName
+	forcePtr := &force
+	orphanPtr := &orphan
+
+	deleteReq := &application.ApplicationResourceDeleteRequest{
+		Name:         namePtr,
+		ResourceName: resourceNamePtr,
+		Version:      namePtr, // Use app name as version for resource lookup
+		Group:        groupPtr,
+		Kind:         kindPtr,
+		Namespace:    namespacePtr,
+		Force:        forcePtr,
+		Orphan:       orphanPtr,
+	}
+
+	err := tm.client.DeleteApplicationResource(ctx, deleteReq)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	return Result(map[string]interface{}{
+		"message": fmt.Sprintf("Resource %s/%s deleted successfully", kind, resourceName),
+		"success": true,
+	}, nil)
+}
+
 // Project handlers
 
 func (tm *ToolManager) handleListProjects(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -1283,14 +1515,102 @@ func (tm *ToolManager) handleCreateRepository(ctx context.Context, arguments map
 	if result := tm.checkSafeMode("create_repository"); result != nil {
 		return result, nil
 	}
-	return errorResult("Repository creation requires direct ArgoCD API interaction. Use ArgoCD CLI or UI to create repositories."), nil
+
+	repoURL := String(arguments, "repo_url", "")
+	repoType := String(arguments, "type", "git")
+	name := String(arguments, "name", "")
+	username := String(arguments, "username", "")
+	password := String(arguments, "password", "")
+	sshPrivateKey := String(arguments, "ssh_private_key", "")
+	insecure := Bool(arguments, "insecure", false)
+
+	if repoURL == "" {
+		return errorResult("repo_url is required"), nil
+	}
+
+	repo := &v1alpha1.Repository{
+		Repo:          repoURL,
+		Type:          repoType,
+		Name:          name,
+		Username:      username,
+		Password:      password,
+		SSHPrivateKey: sshPrivateKey,
+		Insecure:      insecure,
+	}
+
+	createReq := &repository.RepoCreateRequest{
+		Repo:   repo,
+		Upsert: false,
+	}
+
+	createdRepo, err := tm.client.CreateRepository(ctx, createReq)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	return Result(map[string]interface{}{
+		"repo":             createdRepo.Repo,
+		"type":             createdRepo.Type,
+		"name":             createdRepo.Name,
+		"connection_state": createdRepo.ConnectionState,
+		"message":          fmt.Sprintf("Repository %s created successfully", repoURL),
+		"success":          true,
+	}, nil)
 }
 
 func (tm *ToolManager) handleUpdateRepository(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	if result := tm.checkSafeMode("update_repository"); result != nil {
 		return result, nil
 	}
-	return errorResult("Repository update requires direct ArgoCD API interaction. Use ArgoCD CLI or UI to update repositories."), nil
+
+	repoURL := String(arguments, "repo_url", "")
+	name := String(arguments, "name", "")
+	username := String(arguments, "username", "")
+	password := String(arguments, "password", "")
+	sshPrivateKey := String(arguments, "ssh_private_key", "")
+
+	if repoURL == "" {
+		return errorResult("repo_url is required"), nil
+	}
+
+	// Get existing repository first
+	query := &repository.RepoQuery{Repo: repoURL}
+	existingRepo, err := tm.client.GetRepository(ctx, query)
+	if err != nil {
+		return errorResult(fmt.Sprintf("failed to get existing repository: %v", err)), nil
+	}
+
+	// Update fields if provided
+	if name != "" {
+		existingRepo.Name = name
+	}
+	if username != "" {
+		existingRepo.Username = username
+	}
+	if password != "" {
+		existingRepo.Password = password
+	}
+	if sshPrivateKey != "" {
+		existingRepo.SSHPrivateKey = sshPrivateKey
+	}
+
+	updateReq := &repository.RepoUpdateRequest{
+		Repo: existingRepo,
+	}
+
+	updatedRepo, err := tm.client.UpdateRepository(ctx, updateReq)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	return Result(map[string]interface{}{
+		"repo":             updatedRepo.Repo,
+		"type":             updatedRepo.Type,
+		"name":             updatedRepo.Name,
+		"connection_state": updatedRepo.ConnectionState,
+		"message":          fmt.Sprintf("Repository %s updated successfully", repoURL),
+		"success":          true,
+	}, nil)
 }
 
 func (tm *ToolManager) handleDeleteRepository(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -1389,14 +1709,103 @@ func (tm *ToolManager) handleCreateCluster(ctx context.Context, arguments map[st
 	if result := tm.checkSafeMode("create_cluster"); result != nil {
 		return result, nil
 	}
-	return errorResult("Cluster creation requires direct ArgoCD API interaction. Use ArgoCD CLI or UI to create clusters."), nil
+
+	server := String(arguments, "server", "")
+	name := String(arguments, "name", "")
+
+	if server == "" {
+		return errorResult("server is required"), nil
+	}
+
+	// Build cluster config from arguments
+	config, err := buildClusterConfig(arguments)
+	if err != nil {
+		return errorResult(fmt.Sprintf("invalid config: %v", err)), nil
+	}
+
+	newCluster := &v1alpha1.Cluster{
+		Server: server,
+		Name:   name,
+		Config: config,
+	}
+
+	createReq := &cluster.ClusterCreateRequest{
+		Cluster: newCluster,
+		Upsert:  false,
+	}
+
+	createdCluster, err := tm.client.CreateCluster(ctx, createReq)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	// ConnectionState is deprecated but we need to use it for backward compatibility
+	//lint:ignore SA1019 ConnectionState is deprecated
+	connectionState := createdCluster.ConnectionState
+	return Result(map[string]interface{}{
+		"server":           createdCluster.Server,
+		"name":             createdCluster.Name,
+		"config":           createdCluster.Config,
+		"connection_state": connectionState,
+		"message":          fmt.Sprintf("Cluster %s created successfully", server),
+		"success":          true,
+	}, nil)
 }
 
 func (tm *ToolManager) handleUpdateCluster(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	if result := tm.checkSafeMode("update_cluster"); result != nil {
 		return result, nil
 	}
-	return errorResult("Cluster update requires direct ArgoCD API interaction. Use ArgoCD CLI or UI to update clusters."), nil
+
+	server := String(arguments, "server", "")
+	name := String(arguments, "name", "")
+
+	if server == "" {
+		return errorResult("server is required"), nil
+	}
+
+	// Get existing cluster first
+	query := &cluster.ClusterQuery{Server: server}
+	existingCluster, err := tm.client.GetCluster(ctx, query)
+	if err != nil {
+		return errorResult(fmt.Sprintf("failed to get existing cluster: %v", err)), nil
+	}
+
+	// Update fields if provided
+	if name != "" {
+		existingCluster.Name = name
+	}
+
+	// Update config if provided
+	if configMap, ok := arguments["config"].(map[string]interface{}); len(configMap) > 0 && ok {
+		config, err := buildClusterConfig(arguments)
+		if err != nil {
+			return errorResult(fmt.Sprintf("invalid config: %v", err)), nil
+		}
+		existingCluster.Config = config
+	}
+
+	updateReq := &cluster.ClusterUpdateRequest{
+		Cluster:       existingCluster,
+		UpdatedFields: []string{"config", "name"},
+	}
+
+	updatedCluster, err := tm.client.UpdateCluster(ctx, updateReq)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	// ConnectionState is deprecated but we need to use it for backward compatibility
+	//lint:ignore SA1019 ConnectionState is deprecated
+	connectionState := updatedCluster.ConnectionState
+	return Result(map[string]interface{}{
+		"server":           updatedCluster.Server,
+		"name":             updatedCluster.Name,
+		"config":           updatedCluster.Config,
+		"connection_state": connectionState,
+		"message":          fmt.Sprintf("Cluster %s updated successfully", server),
+		"success":          true,
+	}, nil)
 }
 
 func (tm *ToolManager) handleDeleteCluster(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -1485,4 +1894,50 @@ func (tm *ToolManager) checkSafeMode(operation string) *mcp.CallToolResult {
 		return errorResult(fmt.Sprintf("Operation '%s' is not allowed in safe mode. Safe mode restricts write operations for security.", operation))
 	}
 	return nil
+}
+
+// buildClusterConfig builds a v1alpha1.ClusterConfig from the arguments map
+func buildClusterConfig(arguments map[string]interface{}) (v1alpha1.ClusterConfig, error) {
+	config := v1alpha1.ClusterConfig{}
+
+	// Get config map if it exists
+	configMap, ok := arguments["config"].(map[string]interface{})
+	if !ok || len(configMap) == 0 {
+		return config, nil
+	}
+
+	// Parse username
+	if username, ok := configMap["username"].(string); ok {
+		config.Username = username
+	}
+
+	// Parse password
+	if password, ok := configMap["password"].(string); ok {
+		config.Password = password
+	}
+
+	// Parse bearer token
+	if bearerToken, ok := configMap["bearerToken"].(string); ok {
+		config.BearerToken = bearerToken
+	}
+
+	// Parse TLS client config if provided
+	if tlsClientConfigMap, ok := configMap["tlsClientConfig"].(map[string]interface{}); ok {
+		tlsClientConfig := v1alpha1.TLSClientConfig{}
+		if insecure, ok := tlsClientConfigMap["insecure"].(bool); ok {
+			tlsClientConfig.Insecure = insecure
+		}
+		if caData, ok := tlsClientConfigMap["caData"].(string); ok {
+			tlsClientConfig.CAData = []byte(caData)
+		}
+		if certData, ok := tlsClientConfigMap["certData"].(string); ok {
+			tlsClientConfig.CertData = []byte(certData)
+		}
+		if keyData, ok := tlsClientConfigMap["keyData"].(string); ok {
+			tlsClientConfig.KeyData = []byte(keyData)
+		}
+		config.TLSClientConfig = tlsClientConfig
+	}
+
+	return config, nil
 }

@@ -249,6 +249,55 @@ func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.R
 	return nil
 }
 
+// GetApplicationResource returns a single application resource
+func (c *Client) GetApplicationResource(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appClient, err := c.client.NewApplicationClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create app client: %w", err)
+	}
+	defer closer.Close()
+
+	return appClient.GetResource(ctx, query)
+}
+
+// PatchApplicationResource patches a single application resource
+func (c *Client) PatchApplicationResource(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appClient, err := c.client.NewApplicationClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create app client: %w", err)
+	}
+	defer closer.Close()
+
+	return appClient.PatchResource(ctx, patchReq)
+}
+
+// DeleteApplicationResource deletes a single application resource
+func (c *Client) DeleteApplicationResource(ctx context.Context, deleteReq *application.ApplicationResourceDeleteRequest) error {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appClient, err := c.client.NewApplicationClient()
+	if err != nil {
+		return fmt.Errorf("failed to create app client: %w", err)
+	}
+	defer closer.Close()
+
+	_, err = appClient.DeleteResource(ctx, deleteReq)
+	if err != nil {
+		return fmt.Errorf("failed to delete application resource: %w", err)
+	}
+	return nil
+}
+
 // Project client methods
 
 // ListProjects returns a list of projects

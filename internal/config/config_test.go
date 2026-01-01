@@ -118,7 +118,7 @@ argocd:
 	// LoadConfig should handle the error gracefully
 	// viper may not strictly fail on YAML parse errors in all versions
 	// but we can verify it doesn't panic
-	_, err = LoadConfig(logger)
+	_, _ = LoadConfig(logger) // nolint:staticcheck // We only care that it doesn't panic
 	// The function may or may not return an error depending on viper version
 	// but it should not panic
 	assert.NotPanics(t, func() {
