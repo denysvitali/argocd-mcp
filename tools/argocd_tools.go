@@ -1195,10 +1195,15 @@ func (tm *ToolManager) handleGetApplicationResource(ctx context.Context, argumen
 	namespacePtr := &namespace
 	resourceNamePtr := &resourceName
 
+	// Determine the API version from the group
+	// Most Kubernetes resources use v1, but we should allow override
+	version := inferResourceVersion(group)
+	versionPtr := &version
+
 	resourceReq := &application.ApplicationResourceRequest{
 		Name:         namePtr,
 		ResourceName: resourceNamePtr,
-		Version:      namePtr, // Use app name as version for resource lookup
+		Version:      versionPtr,
 		Group:        groupPtr,
 		Kind:         kindPtr,
 		Namespace:    namespacePtr,
@@ -1236,10 +1241,14 @@ func (tm *ToolManager) handlePatchApplicationResource(ctx context.Context, argum
 	patchPtr := &patch
 	patchTypePtr := &patchType
 
+	// Determine the API version from the group
+	version := inferResourceVersion(group)
+	versionPtr := &version
+
 	patchReq := &application.ApplicationResourcePatchRequest{
 		Name:         namePtr,
 		ResourceName: resourceNamePtr,
-		Version:      namePtr, // Use app name as version for resource lookup
+		Version:      versionPtr,
 		Group:        groupPtr,
 		Kind:         kindPtr,
 		Namespace:    namespacePtr,
@@ -1280,10 +1289,14 @@ func (tm *ToolManager) handleDeleteApplicationResource(ctx context.Context, argu
 	forcePtr := &force
 	orphanPtr := &orphan
 
+	// Determine the API version from the group
+	version := inferResourceVersion(group)
+	versionPtr := &version
+
 	deleteReq := &application.ApplicationResourceDeleteRequest{
 		Name:         namePtr,
 		ResourceName: resourceNamePtr,
-		Version:      namePtr, // Use app name as version for resource lookup
+		Version:      versionPtr,
 		Group:        groupPtr,
 		Kind:         kindPtr,
 		Namespace:    namespacePtr,
@@ -1830,6 +1843,39 @@ func (tm *ToolManager) handleDeleteCluster(ctx context.Context, arguments map[st
 }
 
 // Helper functions
+
+// inferResourceVersion infers the Kubernetes API version from the resource group.
+// Most Kubernetes resources use v1. This is a simplified inference that covers
+// common cases. For more accuracy, the version should be obtained from the
+// resource manifest itself or from API discovery.
+func inferResourceVersion(group string) string {
+	// For core API (empty group), use v1
+	if group == "" || group == "core" {
+		return "v1"
+	}
+
+	// Common API groups and their typical versions
+	// Most stable Kubernetes resources use v1
+	commonV1Groups := map[string]bool{
+		"apps":           true,
+		"batch":          true,
+		"networking.k8s.io": true,
+		"policy":         true,
+		"storage.k8s.io":    true,
+		"rbac.authorization.k8s.io": true,
+		"coordination.k8s.io": true,
+		"apiserverinternal.k8s.io": true,
+		"scheduling.k8s.io": true,
+	}
+
+	if commonV1Groups[group] {
+		return "v1"
+	}
+
+	// For custom groups (like postgresql.cnpg.io), also default to v1
+	// as most CRDs use v1
+	return "v1"
+}
 
 // parseEvents converts interface{} to []interface{} with proper type handling
 // The input may be a direct list of events or an EventList struct with an Items field
