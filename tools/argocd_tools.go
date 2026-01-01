@@ -264,10 +264,10 @@ func (tm *ToolManager) defineTools() {
 					},
 					"resource_name": map[string]interface{}{
 						"type":        "string",
-						"description": "Resource name",
+						"description": "Resource name (required)",
 					},
 				},
-				Required: []string{"name"},
+				Required: []string{"name", "kind", "resource_name"},
 			},
 		},
 		{
@@ -1117,10 +1117,28 @@ func (tm *ToolManager) handleRollbackApplication(ctx context.Context, arguments 
 
 func (tm *ToolManager) handleListResourceActions(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	name := String(arguments, "name", "")
+	group := String(arguments, "group", "")
+	kind := String(arguments, "kind", "")
+	namespace := String(arguments, "namespace", "")
+	resourceName := String(arguments, "resource_name", "")
 
 	namePtr := &name
+	groupPtr := &group
+	kindPtr := &kind
+	namespacePtr := &namespace
+	resourceNamePtr := &resourceName
+
+	// Determine the API version from the group
+	version := inferResourceVersion(group)
+	versionPtr := &version
+
 	query := &application.ApplicationResourceRequest{
-		Name: namePtr,
+		Name:         namePtr,
+		ResourceName: resourceNamePtr,
+		Version:      versionPtr,
+		Group:        groupPtr,
+		Kind:         kindPtr,
+		Namespace:    namespacePtr,
 	}
 
 	actions, err := tm.client.ListResourceActions(ctx, query)
