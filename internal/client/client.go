@@ -229,6 +229,7 @@ func (c *Client) ListResourceActions(ctx context.Context, query *application.App
 // RunResourceAction runs an action on a resource
 //
 //lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
+//lint:ignore SA1019 RunResourceAction is deprecated but required for the API
 func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error {
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
