@@ -36,11 +36,12 @@ type Client struct {
 }
 
 // NewClient creates a new ArgoCD client
-func NewClient(logger *logrus.Logger, server, token string, insecure bool, certFile string) (*Client, error) {
+func NewClient(logger *logrus.Logger, server, token string, insecure, plaintext bool, certFile string) (*Client, error) {
 	opts := &apiclient.ClientOptions{
 		ServerAddr: server,
 		AuthToken:  token,
 		Insecure:   insecure,
+		PlainText:  plaintext,
 		CertFile:   certFile,
 	}
 

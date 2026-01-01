@@ -86,7 +86,7 @@ The server communicates over stdio by default.`,
 				defer cancel()
 
 				var err error
-				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure)
+				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText)
 				if err != nil {
 					return fmt.Errorf("failed to get auth token: %w", err)
 				}
@@ -97,7 +97,7 @@ The server communicates over stdio by default.`,
 			}
 
 			// Create client
-			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.CertFile)
+			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
@@ -129,34 +129,61 @@ The server communicates over stdio by default.`,
 	// Config init command
 	configCmd := &cobra.Command{
 		Use:   "config init",
-		Short: "Initialize configuration interactively",
+		Short: "Initialize configuration",
+		Long: `Initialize ArgoCD MCP configuration.
+
+Use flags for non-interactive configuration:
+  argocd-mcp config init --server argocd.example.com:443 --username admin --password secret
+
+Or run interactively without flags:
+  argocd-mcp config init`,
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("ArgoCD MCP Configuration")
-			fmt.Println("========================")
-			fmt.Println()
+			// Get flags
+			server, _ := cmd.Flags().GetString("server")
+			username, _ := cmd.Flags().GetString("username")
+			password, _ := cmd.Flags().GetString("password")
+			token, _ := cmd.Flags().GetString("token")
+			insecure, _ := cmd.Flags().GetBool("insecure")
+			plaintext, _ := cmd.Flags().GetBool("plaintext")
+			certFile, _ := cmd.Flags().GetString("cert-file")
 
-			auth.PrintInfo("Enter your ArgoCD server details")
-			fmt.Print("Server address (default: localhost:8080): ")
-			var server string
-			fmt.Scanln(&server)
-			if server == "" {
-				server = "localhost:8080"
+			// Interactive mode if no flags provided
+			interactive := server == "" && username == "" && password == "" && token == ""
+			if interactive {
+				fmt.Println("ArgoCD MCP Configuration")
+				fmt.Println("========================")
+				fmt.Println()
+
+				auth.PrintInfo("Enter your ArgoCD server details")
+				fmt.Print("Server address (default: localhost:8080): ")
+				var srv string
+				fmt.Scanln(&srv)
+				if srv == "" {
+					srv = "localhost:8080"
+				}
+				server = srv
+
+				fmt.Print("Username: ")
+				var user string
+				fmt.Scanln(&user)
+				username = user
+
+				fmt.Print("Password: ")
+				var pass string
+				fmt.Scanln(&pass)
+				password = pass
 			}
-
-			fmt.Print("Username: ")
-			var username string
-			fmt.Scanln(&username)
-
-			fmt.Print("Password: ")
-			var password string
-			fmt.Scanln(&password)
 
 			// Create config structure
 			cfg := config.Config{
 				ArgoCD: config.ArgoCDConfig{
-					Server:   server,
-					Username: username,
-					Password: password,
+					Server:    server,
+					Username:  username,
+					Password:  password,
+					Token:     token,
+					Insecure:  insecure,
+					PlainText: plaintext,
+					CertFile:  certFile,
 				},
 				Server: config.ServerConfig{
 					MCPEndpoint: "stdio",
@@ -193,8 +220,23 @@ The server communicates over stdio by default.`,
 			if username != "" {
 				auth.PrintInfo(fmt.Sprintf("Username: %s", username))
 			}
+			if plaintext {
+				auth.PrintWarn("Plaintext mode enabled (HTTP without TLS)")
+			}
+			if insecure {
+				auth.PrintWarn("Insecure mode enabled (skipping TLS verification)")
+			}
 		},
 	}
+
+	// Add flags for non-interactive configuration
+	configCmd.Flags().StringP("server", "s", "", "ArgoCD server address (e.g., argocd.example.com:443)")
+	configCmd.Flags().StringP("username", "u", "", "Username for authentication")
+	configCmd.Flags().StringP("password", "p", "", "Password for authentication")
+	configCmd.Flags().StringP("token", "t", "", "Authentication token (alternative to username/password)")
+	configCmd.Flags().BoolP("insecure", "k", false, "Skip TLS certificate verification")
+	configCmd.Flags().BoolP("plaintext", "", false, "Use HTTP without TLS (for testing only)")
+	configCmd.Flags().StringP("cert-file", "c", "", "Path to CA certificate file")
 
 	// Config show command
 	configShowCmd := &cobra.Command{
@@ -249,7 +291,7 @@ The server communicates over stdio by default.`,
 				defer cancel()
 
 				var err error
-				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure)
+				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText)
 				if err != nil {
 					return fmt.Errorf("failed to get auth token: %w", err)
 				}
@@ -259,7 +301,7 @@ The server communicates over stdio by default.`,
 				return fmt.Errorf("authentication required")
 			}
 
-			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.CertFile)
+			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}

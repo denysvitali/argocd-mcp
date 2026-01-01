@@ -21,6 +21,7 @@ type ArgoCDConfig struct {
 	Password string `mapstructure:"password"`
 	Token    string `mapstructure:"token"`
 	Insecure bool   `mapstructure:"insecure"`
+	PlainText bool   `mapstructure:"plaintext"`
 	CertFile string `mapstructure:"cert_file"`
 }
 
