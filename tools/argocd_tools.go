@@ -1832,28 +1832,39 @@ func (tm *ToolManager) handleDeleteCluster(ctx context.Context, arguments map[st
 // Helper functions
 
 // parseEvents converts interface{} to []interface{} with proper type handling
+// The input may be a direct list of events or an EventList struct with an Items field
 func parseEvents(eventsRaw interface{}) ([]interface{}, error) {
-	events, ok := eventsRaw.([]interface{})
-	if !ok {
-		// Try JSON unmarshal fallback
-		data, err := json.Marshal(eventsRaw)
-		if err != nil {
-			return nil, err
-		}
-		var parsed []interface{}
-		if err := json.Unmarshal(data, &parsed); err != nil {
-			return nil, err
-		}
-		events = parsed
+	// First, JSON marshal the input to normalize it
+	data, err := json.Marshal(eventsRaw)
+	if err != nil {
+		return nil, err
 	}
 
-	result := make([]interface{}, 0, len(events))
-	for _, event := range events {
-		eventMap, ok := event.(map[string]interface{})
-		if !ok {
-			continue
+	// Try to parse as EventList (object with items field)
+	var eventList struct {
+		Items json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(data, &eventList); err == nil && len(eventList.Items) > 0 {
+		// Unmarshal items as a slice of generic objects
+		var items []map[string]interface{}
+		if err := json.Unmarshal(eventList.Items, &items); err == nil {
+			result := make([]interface{}, len(items))
+			for i, item := range items {
+				result[i] = item
+			}
+			return result, nil
 		}
-		result = append(result, eventMap)
+	}
+
+	// Fallback to parsing as direct list
+	var parsed []map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, err
+	}
+
+	result := make([]interface{}, len(parsed))
+	for i, item := range parsed {
+		result[i] = item
 	}
 	return result, nil
 }
