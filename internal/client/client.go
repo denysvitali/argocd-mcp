@@ -208,6 +208,30 @@ func (c *Client) GetApplicationEvents(ctx context.Context, query *application.Ap
 	return appClient.ListResourceEvents(ctx, query)
 }
 
+// GetManagedResources returns the managed resources for an application with diff information
+func (c *Client) GetManagedResources(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appClient, err := c.client.NewApplicationClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create app client: %w", err)
+	}
+	defer closer.Close()
+
+	appNamePtr := &appName
+	query := &application.ResourcesQuery{
+		ApplicationName: appNamePtr,
+	}
+
+	resp, err := appClient.ManagedResources(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get managed resources: %w", err)
+	}
+	return resp.Items, nil
+}
+
 // ListResourceActions lists available actions for a resource
 func (c *Client) ListResourceActions(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error) {
 	if err := c.WaitForRateLimit(ctx); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"gopkg.in/yaml.v2"
 )
 
 // Default timeout and retry constants
@@ -173,6 +174,20 @@ func (tm *ToolManager) defineTools() {
 					"revision": map[string]interface{}{
 						"type":        "string",
 						"description": "Specific revision to get manifests for (optional)",
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
+		{
+			Name:        "get_application_diff",
+			Description: "Get the diff between live and desired state for an application",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
 					},
 				},
 				Required: []string{"name"},
@@ -803,6 +818,8 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return tm.handleRollbackApplication(ctx, arguments)
 		case "get_application_manifests":
 			return tm.handleGetApplicationManifests(ctx, arguments)
+		case "get_application_diff":
+			return tm.handleGetApplicationDiff(ctx, arguments)
 		case "get_application_events":
 			return tm.handleGetApplicationEvents(ctx, arguments)
 		case "list_resource_actions":
@@ -1004,10 +1021,80 @@ func (tm *ToolManager) handleGetApplicationManifests(ctx context.Context, argume
 		return errorResult(err.Error()), nil
 	}
 
+	// Convert all manifests from JSON to YAML
+	yamlManifests := make([]string, len(manifests))
+	for i, m := range manifests {
+		yamlManifests[i] = jsonToYaml(m)
+	}
+
 	return Result(map[string]interface{}{
-		"manifests": manifests,
+		"manifests": yamlManifests,
 		"count":     len(manifests),
 	}, nil)
+}
+
+func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	name := String(arguments, "name", "")
+
+	resources, err := tm.client.GetManagedResources(ctx, name)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	// Format the diff information
+	outOfSync := make([]interface{}, 0)
+	synced := make([]interface{}, 0)
+
+	for _, r := range resources {
+		resourceInfo := map[string]interface{}{
+			"group":     r.Group,
+			"kind":      r.Kind,
+			"namespace": r.Namespace,
+			"name":      r.Name,
+		}
+
+		// Use Modified flag to determine sync status (preferred over deprecated Diff field)
+		if r.Modified || r.Diff != "" {
+			resourceInfo["status"] = "OutOfSync"
+			resourceInfo["target_state"] = jsonToYaml(r.TargetState)
+			resourceInfo["normalized_live_state"] = jsonToYaml(r.NormalizedLiveState)
+			resourceInfo["predicted_live_state"] = jsonToYaml(r.PredictedLiveState)
+			resourceInfo["resource_version"] = r.ResourceVersion
+			// Include legacy diff for backward compatibility
+			if r.Diff != "" {
+				resourceInfo["diff"] = r.Diff
+			}
+			outOfSync = append(outOfSync, resourceInfo)
+		} else {
+			resourceInfo["status"] = "Synced"
+			synced = append(synced, resourceInfo)
+		}
+	}
+
+	return Result(map[string]interface{}{
+		"application":       name,
+		"out_of_sync":       outOfSync,
+		"synced":            synced,
+		"total":             len(resources),
+		"out_of_sync_count": len(outOfSync),
+	}, nil)
+}
+
+// jsonToYaml converts JSON string to YAML string
+func jsonToYaml(jsonStr string) string {
+	if jsonStr == "" {
+		return ""
+	}
+	var data interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+		// If JSON parsing fails, return original string
+		return jsonStr
+	}
+	yamlBytes, err := yaml.Marshal(data)
+	if err != nil {
+		return jsonStr
+	}
+	return string(yamlBytes)
 }
 
 func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
