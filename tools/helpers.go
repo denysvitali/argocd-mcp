@@ -4,10 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+// Response limits to prevent context explosion
+const (
+	// MaxListItems limits the number of items returned in list operations
+	MaxListItems = 50
+	// MaxEvents limits the number of events returned
+	MaxEvents = 20
+	// MaxDiffResources limits the number of resources in diff output
+	MaxDiffResources = 20
+	// MaxManifests limits the number of manifests returned
+	MaxManifests = 20
+	// MaxResponseLines limits the maximum lines in any response field
+	MaxResponseLines = 100
+	// MaxResponseSizeChars limits the maximum characters in any response string
+	MaxResponseSizeChars = 50000
 )
 
 // Result returns a JSON-formatted result
@@ -15,6 +32,9 @@ func Result(data interface{}, err error) (*mcp.CallToolResult, error) {
 	if err != nil {
 		return errorResult(err.Error()), nil
 	}
+
+	// Truncate data to prevent context explosion
+	data = truncateResponse(data)
 
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
@@ -42,8 +62,12 @@ func ResultList(items interface{}, total int, err error) (*mcp.CallToolResult, e
 		Total int           `json:"total"`
 	}
 
+	// Truncate items to prevent context explosion
+	itemsList := items.([]interface{})
+	itemsList = truncateResponse(itemsList).([]interface{})
+
 	response := listResponse{
-		Items: items.([]interface{}),
+		Items: itemsList,
 		Total: total,
 	}
 
@@ -214,4 +238,47 @@ func FormatTime(seconds int64) string {
 		return "N/A"
 	}
 	return fmt.Sprintf("%d seconds ago", seconds)
+}
+
+// truncateString truncates a string to a maximum number of characters
+func truncateString(s string, maxChars int) string {
+	if len(s) <= maxChars {
+		return s
+	}
+	if maxChars <= 3 {
+		return strings.Repeat(".", maxChars)
+	}
+	return s[:maxChars-3] + "..."
+}
+
+// truncateLines truncates a multi-line string to a maximum number of lines
+func truncateLines(s string, maxLines int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= maxLines {
+		return s
+	}
+	return strings.Join(lines[:maxLines], "\n") + "\n... (truncated)"
+}
+
+// truncateResponse truncates a response value to prevent context explosion
+func truncateResponse(value interface{}) interface{} {
+	switch v := value.(type) {
+	case string:
+		truncated := truncateString(v, MaxResponseSizeChars)
+		truncated = truncateLines(truncated, MaxResponseLines)
+		return truncated
+	case []interface{}:
+		if len(v) > MaxListItems {
+			return v[:MaxListItems]
+		}
+		return v
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for key, val := range v {
+			result[key] = truncateResponse(val)
+		}
+		return result
+	default:
+		return v
+	}
 }

@@ -75,6 +75,10 @@ func (tm *ToolManager) defineTools() {
 						"type":        "string",
 						"description": "Filter applications by project name",
 					},
+					"limit": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of applications to return (default: 50, max: 100)",
+					},
 				},
 			},
 		},
@@ -190,6 +194,10 @@ func (tm *ToolManager) defineTools() {
 						"type":        "string",
 						"description": "Application name (required)",
 					},
+					"limit": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of resources to show diff for (default: 20)",
+					},
 				},
 				Required: []string{"name"},
 			},
@@ -203,6 +211,10 @@ func (tm *ToolManager) defineTools() {
 					"name": map[string]interface{}{
 						"type":        "string",
 						"description": "Application name (required)",
+					},
+					"limit": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of events to return (default: 20)",
 					},
 				},
 				Required: []string{"name"},
@@ -437,6 +449,10 @@ func (tm *ToolManager) defineTools() {
 						"type":        "string",
 						"description": "Filter projects by name (partial match)",
 					},
+					"limit": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of projects to return (default: 50)",
+					},
 				},
 			},
 		},
@@ -558,6 +574,10 @@ func (tm *ToolManager) defineTools() {
 						"type":        "string",
 						"description": "Filter by repository URL (partial match)",
 					},
+					"limit": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of repositories to return (default: 50)",
+					},
 				},
 			},
 		},
@@ -673,6 +693,10 @@ func (tm *ToolManager) defineTools() {
 					"server": map[string]interface{}{
 						"type":        "string",
 						"description": "Filter by cluster server URL (partial match)",
+					},
+					"limit": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of clusters to return (default: 50)",
 					},
 				},
 			},
@@ -878,6 +902,10 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 func (tm *ToolManager) handleListApplications(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	name := String(arguments, "name", "")
 	project := String(arguments, "project", "")
+	limit := Int(arguments, "limit", MaxListItems)
+	if limit > 100 {
+		limit = 100
+	}
 	query := &application.ApplicationQuery{}
 	if name != "" {
 		query.Name = &name
@@ -891,12 +919,18 @@ func (tm *ToolManager) handleListApplications(ctx context.Context, arguments map
 		return errorResult(err.Error()), nil
 	}
 
+	// Apply limit
+	total := len(apps.Items)
+	if len(apps.Items) > limit {
+		apps.Items = apps.Items[:limit]
+	}
+
 	items := make([]interface{}, len(apps.Items))
 	for i, app := range apps.Items {
 		items[i] = formatApplicationSummary(&app)
 	}
 
-	return ResultList(items, len(items), nil)
+	return ResultList(items, total, nil)
 }
 
 func (tm *ToolManager) handleGetApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -1022,20 +1056,29 @@ func (tm *ToolManager) handleGetApplicationManifests(ctx context.Context, argume
 		return errorResult(err.Error()), nil
 	}
 
-	// Convert all manifests from JSON to YAML
+	// Apply limit
+	total := len(manifests)
+	if len(manifests) > MaxManifests {
+		manifests = manifests[:MaxManifests]
+	}
+
+	// Convert manifests from JSON to YAML with truncation
 	yamlManifests := make([]string, len(manifests))
 	for i, m := range manifests {
-		yamlManifests[i] = jsonToYaml(m)
+		yamlManifests[i] = truncateString(jsonToYaml(m), MaxResponseSizeChars)
 	}
 
 	return Result(map[string]interface{}{
 		"manifests": yamlManifests,
 		"count":     len(manifests),
+		"total":     total,
+		"limited":   total > MaxManifests,
 	}, nil)
 }
 
 func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	name := String(arguments, "name", "")
+	limit := Int(arguments, "limit", MaxDiffResources)
 
 	resources, err := tm.client.GetManagedResources(ctx, name)
 	if err != nil {
@@ -1046,7 +1089,12 @@ func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments m
 	outOfSync := make([]interface{}, 0)
 	synced := make([]interface{}, 0)
 
-	for _, r := range resources {
+	for i, r := range resources {
+		// Apply limit to out-of-sync resources (most important for diff)
+		if i >= limit && (r.Modified || r.Diff != "") {
+			continue
+		}
+
 		resourceInfo := map[string]interface{}{
 			"group":     r.Group,
 			"kind":      r.Kind,
@@ -1064,12 +1112,12 @@ func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments m
 			diff := computeDiff(targetState, liveState)
 
 			resourceInfo["status"] = "OutOfSync"
-			resourceInfo["target"] = targetState
-			resourceInfo["live"] = liveState
+			resourceInfo["target"] = truncateString(targetState, MaxResponseSizeChars/2)
+			resourceInfo["live"] = truncateString(liveState, MaxResponseSizeChars/2)
 			resourceInfo["diff"] = diff
 			resourceInfo["resource_version"] = r.ResourceVersion
 			outOfSync = append(outOfSync, resourceInfo)
-		} else {
+		} else if len(synced) < limit {
 			resourceInfo["status"] = "Synced"
 			synced = append(synced, resourceInfo)
 		}
@@ -1081,6 +1129,7 @@ func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments m
 		"synced":            synced,
 		"total":             len(resources),
 		"out_of_sync_count": len(outOfSync),
+		"limited":           len(resources) > limit,
 	}, nil)
 }
 
@@ -1209,6 +1258,7 @@ func jsonToYaml(jsonStr string) string {
 
 func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	name := String(arguments, "name", "")
+	limit := Int(arguments, "limit", MaxEvents)
 	query := &application.ApplicationResourceEventsQuery{
 		Name: &name,
 	}
@@ -1221,6 +1271,11 @@ func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments
 	events, parseErr := parseEvents(eventsRaw)
 	if parseErr != nil {
 		return errorResult(fmt.Sprintf("Failed to parse events: %v", parseErr)), nil
+	}
+
+	total := len(events)
+	if len(events) > limit {
+		events = events[:limit]
 	}
 
 	eventList := make([]interface{}, len(events))
@@ -1239,7 +1294,7 @@ func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments
 
 	return Result(map[string]interface{}{
 		"items": eventList,
-		"total": len(events),
+		"total": total,
 	}, nil)
 }
 
@@ -1534,6 +1589,7 @@ func (tm *ToolManager) handleDeleteApplicationResource(ctx context.Context, argu
 
 func (tm *ToolManager) handleListProjects(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	name := String(arguments, "name", "")
+	limit := Int(arguments, "limit", MaxListItems)
 	query := &project.ProjectQuery{}
 	if name != "" {
 		query.Name = name
@@ -1544,6 +1600,12 @@ func (tm *ToolManager) handleListProjects(ctx context.Context, arguments map[str
 		return errorResult(err.Error()), nil
 	}
 
+	// Apply limit
+	total := len(projects.Items)
+	if len(projects.Items) > limit {
+		projects.Items = projects.Items[:limit]
+	}
+
 	items := make([]interface{}, len(projects.Items))
 	for i, proj := range projects.Items {
 		items[i] = map[string]interface{}{
@@ -1552,7 +1614,7 @@ func (tm *ToolManager) handleListProjects(ctx context.Context, arguments map[str
 		}
 	}
 
-	return ResultList(items, len(items), nil)
+	return ResultList(items, total, nil)
 }
 
 func (tm *ToolManager) handleGetProject(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -1698,6 +1760,7 @@ func (tm *ToolManager) handleGetProjectEvents(ctx context.Context, arguments map
 
 func (tm *ToolManager) handleListRepositories(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	repoURL := String(arguments, "repo_url", "")
+	limit := Int(arguments, "limit", MaxListItems)
 	query := &repository.RepoQuery{}
 	if repoURL != "" {
 		query.Repo = repoURL
@@ -1706,6 +1769,12 @@ func (tm *ToolManager) handleListRepositories(ctx context.Context, arguments map
 	repos, err := tm.client.ListRepositories(ctx, query)
 	if err != nil {
 		return errorResult(err.Error()), nil
+	}
+
+	// Apply limit
+	total := len(repos.Items)
+	if len(repos.Items) > limit {
+		repos.Items = repos.Items[:limit]
 	}
 
 	items := make([]interface{}, len(repos.Items))
@@ -1717,7 +1786,7 @@ func (tm *ToolManager) handleListRepositories(ctx context.Context, arguments map
 		}
 	}
 
-	return ResultList(items, len(items), nil)
+	return ResultList(items, total, nil)
 }
 
 func (tm *ToolManager) handleGetRepository(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -1890,6 +1959,7 @@ func (tm *ToolManager) handleValidateRepository(ctx context.Context, arguments m
 
 func (tm *ToolManager) handleListClusters(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	server := String(arguments, "server", "")
+	limit := Int(arguments, "limit", MaxListItems)
 	query := &cluster.ClusterQuery{}
 	if server != "" {
 		query.Server = server
@@ -1900,6 +1970,12 @@ func (tm *ToolManager) handleListClusters(ctx context.Context, arguments map[str
 		return errorResult(err.Error()), nil
 	}
 
+	// Apply limit
+	total := len(clusters.Items)
+	if len(clusters.Items) > limit {
+		clusters.Items = clusters.Items[:limit]
+	}
+
 	items := make([]interface{}, len(clusters.Items))
 	for i, c := range clusters.Items {
 		items[i] = map[string]interface{}{
@@ -1908,7 +1984,7 @@ func (tm *ToolManager) handleListClusters(ctx context.Context, arguments map[str
 		}
 	}
 
-	return ResultList(items, len(items), nil)
+	return ResultList(items, total, nil)
 }
 
 func (tm *ToolManager) handleGetCluster(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
