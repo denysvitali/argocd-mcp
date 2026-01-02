@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+argocd-mcp
 
 # Test binary
 *.test
