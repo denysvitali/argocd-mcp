@@ -13,6 +13,8 @@ import (
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/project"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
+	synccommon "github.com/argoproj/gitops-engine/pkg/sync/common"
+	healthlib "github.com/argoproj/gitops-engine/pkg/health"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
@@ -1089,12 +1091,7 @@ func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments m
 	outOfSync := make([]interface{}, 0)
 	synced := make([]interface{}, 0)
 
-	for i, r := range resources {
-		// Apply limit to out-of-sync resources (most important for diff)
-		if i >= limit && (r.Modified || r.Diff != "") {
-			continue
-		}
-
+	for _, r := range resources {
 		resourceInfo := map[string]interface{}{
 			"group":     r.Group,
 			"kind":      r.Kind,
@@ -1104,6 +1101,10 @@ func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments m
 
 		// Use Modified flag to determine sync status (preferred over deprecated Diff field)
 		if r.Modified || r.Diff != "" {
+			// Limit the number of out-of-sync resources reported
+			if len(outOfSync) >= limit {
+				continue
+			}
 			// Strip managedFields and convert to YAML
 			targetState := stripManagedFieldsYaml(r.TargetState)
 			liveState := stripManagedFieldsYaml(r.NormalizedLiveState)
@@ -1124,12 +1125,12 @@ func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments m
 	}
 
 	return Result(map[string]interface{}{
-		"application":       name,
-		"out_of_sync":       outOfSync,
-		"synced":            synced,
-		"total":             len(resources),
-		"out_of_sync_count": len(outOfSync),
-		"limited":           len(resources) > limit,
+		"application":        name,
+		"out_of_sync":        outOfSync,
+		"synced":             synced,
+		"total":              len(resources),
+		"out_of_sync_count":  len(outOfSync),
+		"limited":            len(resources) > limit,
 	}, nil)
 }
 
@@ -2207,13 +2208,30 @@ func parseEvents(eventsRaw interface{}) ([]interface{}, error) {
 }
 
 func formatApplicationSummary(app *v1alpha1.Application) map[string]interface{} {
+	// Count out-of-sync resources
+	outOfSyncCount := 0
+	for _, r := range app.Status.Resources {
+		if r.Status == v1alpha1.SyncStatusCodeOutOfSync {
+			outOfSyncCount++
+		}
+	}
+
+	// Determine if there are any issues
+	hasIssues := outOfSyncCount > 0 ||
+		app.Status.Health.Status != healthlib.HealthStatusHealthy ||
+		(app.Status.OperationState != nil &&
+			(app.Status.OperationState.Phase == synccommon.OperationFailed ||
+				app.Status.OperationState.Phase == synccommon.OperationError))
+
 	return map[string]interface{}{
-		"name":      app.Name,
-		"project":   app.Spec.Project,
-		"server":    app.Spec.Destination.Server,
-		"namespace": app.Spec.Destination.Namespace,
-		"status":    app.Status.Sync.Status,
-		"health":    app.Status.Health.Status,
+		"name":              app.Name,
+		"project":           app.Spec.Project,
+		"server":            app.Spec.Destination.Server,
+		"namespace":         app.Spec.Destination.Namespace,
+		"status":            app.Status.Sync.Status,
+		"health":            app.Status.Health.Status,
+		"out_of_sync_count": outOfSyncCount,
+		"has_issues":        hasIssues,
 	}
 }
 
@@ -2221,18 +2239,56 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 	// Health.Message is deprecated but we still use it for backward compatibility
 	//lint:ignore SA1019 Health.Message is deprecated
 	healthMessage := app.Status.Health.Message
+
+	// Count out-of-sync resources
+	outOfSyncCount := 0
+	for _, r := range app.Status.Resources {
+		if r.Status == v1alpha1.SyncStatusCodeOutOfSync {
+			outOfSyncCount++
+		}
+	}
+
+	// Determine if there are any issues
+	hasIssues := outOfSyncCount > 0 ||
+		app.Status.Health.Status != healthlib.HealthStatusHealthy ||
+		(app.Status.OperationState != nil &&
+			(app.Status.OperationState.Phase == synccommon.OperationFailed ||
+				app.Status.OperationState.Phase == synccommon.OperationError))
+
+	// Get operation state info
+	var operationPhase string
+	var operationMessage string
+	if app.Status.OperationState != nil {
+		operationPhase = string(app.Status.OperationState.Phase)
+		operationMessage = app.Status.OperationState.Message
+	}
+
+	// Format conditions
+	conditions := make([]map[string]interface{}, 0, len(app.Status.Conditions))
+	for _, c := range app.Status.Conditions {
+		conditions = append(conditions, map[string]interface{}{
+			"type":    c.Type,
+			"message": c.Message,
+		})
+	}
+
 	return map[string]interface{}{
-		"name":            app.Name,
-		"project":         app.Spec.Project,
-		"repo_url":        app.Spec.Source.RepoURL,
-		"path":            app.Spec.Source.Path,
-		"target_revision": app.Spec.Source.TargetRevision,
-		"server":          app.Spec.Destination.Server,
-		"namespace":       app.Spec.Destination.Namespace,
-		"status":          app.Status.Sync.Status,
-		"health":          app.Status.Health.Status,
-		"health_message":  healthMessage,
-		"revision":        app.Status.Sync.Revision,
+		"name":              app.Name,
+		"project":           app.Spec.Project,
+		"repo_url":          app.Spec.Source.RepoURL,
+		"path":              app.Spec.Source.Path,
+		"target_revision":   app.Spec.Source.TargetRevision,
+		"server":            app.Spec.Destination.Server,
+		"namespace":         app.Spec.Destination.Namespace,
+		"status":            app.Status.Sync.Status,
+		"health":            app.Status.Health.Status,
+		"health_message":    healthMessage,
+		"revision":          app.Status.Sync.Revision,
+		"out_of_sync_count": outOfSyncCount,
+		"has_issues":        hasIssues,
+		"operation_phase":   operationPhase,
+		"operation_message": operationMessage,
+		"conditions":        conditions,
 	}
 }
 
