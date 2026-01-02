@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -114,7 +115,7 @@ func TestReadOnlyToolsIntegration(t *testing.T) {
 	argocdClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile)
 	require.NoError(t, err, "Failed to create ArgoCD client")
 
-	tm := NewToolManager(argocdClient, logger, false)
+	tm := NewToolManager(argocdClient, logger, true)
 
 	t.Run("list_applications", func(t *testing.T) {
 		result, err := tm.handleListApplications(ctx, make(map[string]any))
@@ -184,6 +185,43 @@ func TestReadOnlyToolsIntegration(t *testing.T) {
 		err = json.Unmarshal([]byte(getTextContent(result)), &events)
 		require.NoError(t, err)
 		assert.NotNil(t, events.Items)
+	})
+
+	t.Run("get_application_diff", func(t *testing.T) {
+		args := make(map[string]any)
+		args["name"] = appName
+		result, err := tm.handleGetApplicationDiff(ctx, args)
+		require.NoError(t, err)
+		assert.False(t, result.IsError, "Result should not be an error: %s", getTextContent(result))
+
+		var diffResult map[string]any
+		err = json.Unmarshal([]byte(getTextContent(result)), &diffResult)
+		require.NoError(t, err)
+
+		t.Logf("Diff result: %+v", diffResult)
+
+		// Check that we have the expected structure
+		assert.Contains(t, diffResult, "application")
+		assert.Contains(t, diffResult, "out_of_sync")
+		assert.Contains(t, diffResult, "synced")
+		assert.Contains(t, diffResult, "total")
+
+		outOfSync := diffResult["out_of_sync"].([]any)
+		t.Logf("Out of sync count: %d", len(outOfSync))
+		for i, r := range outOfSync {
+			resource := r.(map[string]any)
+			t.Logf("Resource %d: %s/%s/%s", i, resource["group"], resource["kind"], resource["name"])
+			t.Logf("  status: %s", resource["status"])
+			if target, ok := resource["target"].(string); ok {
+				t.Logf("  target (first 500 chars): %s", target[:int(math.Min(500, float64(len(target))))])
+			}
+			if live, ok := resource["live"].(string); ok {
+				t.Logf("  live (first 500 chars): %s", live[:int(math.Min(500, float64(len(live))))])
+			}
+			if diff, ok := resource["diff"].(string); ok {
+				t.Logf("  diff:\n%s", diff)
+			}
+		}
 	})
 
 	t.Run("list_projects", func(t *testing.T) {
