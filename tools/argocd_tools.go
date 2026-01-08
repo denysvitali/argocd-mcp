@@ -13,13 +13,13 @@ import (
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/project"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
-	synccommon "github.com/argoproj/gitops-engine/pkg/sync/common"
 	healthlib "github.com/argoproj/gitops-engine/pkg/health"
+	synccommon "github.com/argoproj/gitops-engine/pkg/sync/common"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"gopkg.in/yaml.v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Default timeout and retry constants
@@ -206,13 +206,29 @@ func (tm *ToolManager) defineTools() {
 		},
 		{
 			Name:        "get_application_events",
-			Description: "Get events for an application",
+			Description: "Get events for an application, optionally filtered by a specific resource",
 			InputSchema: mcp.ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
 						"type":        "string",
 						"description": "Application name (required)",
+					},
+					"resource_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter events by resource name",
+					},
+					"group": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter events by resource group (e.g., apps, core)",
+					},
+					"kind": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter events by resource kind (e.g., Deployment, Pod)",
+					},
+					"namespace": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter events by resource namespace",
 					},
 					"limit": map[string]interface{}{
 						"type":        "integer",
@@ -1125,12 +1141,12 @@ func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments m
 	}
 
 	return Result(map[string]interface{}{
-		"application":        name,
-		"out_of_sync":        outOfSync,
-		"synced":             synced,
-		"total":              len(resources),
-		"out_of_sync_count":  len(outOfSync),
-		"limited":            len(resources) > limit,
+		"application":       name,
+		"out_of_sync":       outOfSync,
+		"synced":            synced,
+		"total":             len(resources),
+		"out_of_sync_count": len(outOfSync),
+		"limited":           len(resources) > limit,
 	}, nil)
 }
 
@@ -1155,15 +1171,11 @@ func stripManagedFieldsYaml(jsonStr string) string {
 	return jsonToYaml(string(jsonBytes))
 }
 
-// computeDiff generates a YAML diff in unified format between two YAML manifests
+// computeDiff generates a human-readable diff between two YAML manifests
 func computeDiff(target, live string) string {
-	if target == "" {
+	if target == "" || live == "" {
 		return ""
 	}
-	if live == "" {
-		return formatYamlDiff(target, []string{}, []string{}, true)
-	}
-
 	// Parse both YAML documents
 	var targetMap, liveMap map[string]interface{}
 	if err := yaml.Unmarshal([]byte(target), &targetMap); err != nil {
@@ -1174,14 +1186,17 @@ func computeDiff(target, live string) string {
 	}
 
 	// Build diff by comparing values
-	var added, removed []string
-	compareMapsForDiff("", targetMap, liveMap, &added, &removed)
+	var diffLines []string
+	compareMaps("", targetMap, liveMap, &diffLines)
 
-	return formatYamlDiff(target, added, removed, false)
+	if len(diffLines) == 0 {
+		return ""
+	}
+	return strings.Join(diffLines, "\n")
 }
 
-// compareMapsForDiff recursively compares two maps and collects differences
-func compareMapsForDiff(path string, target, live map[string]interface{}, added, removed *[]string) {
+// compareMaps recursively compares two maps and adds differences to diffLines
+func compareMaps(path string, target, live map[string]interface{}, diffLines *[]string) {
 	// Check for removed or changed fields
 	for key, tVal := range target {
 		currentPath := key
@@ -1190,42 +1205,41 @@ func compareMapsForDiff(path string, target, live map[string]interface{}, added,
 		}
 		lVal, exists := live[key]
 		if !exists {
-			*removed = append(*removed, currentPath)
+			*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v (REMOVED)", currentPath, tVal))
 		} else {
-			compareValuesForDiff(currentPath, tVal, lVal, added, removed)
+			compareValues(currentPath, tVal, lVal, diffLines)
 		}
 	}
 	// Check for added fields
-	for key := range live {
+	for key, lVal := range live {
 		if _, exists := target[key]; !exists {
 			currentPath := key
 			if path != "" {
 				currentPath = path + "." + key
 			}
-			*added = append(*added, currentPath)
+			*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v (ADDED)", currentPath, lVal))
 		}
 	}
 }
 
-// compareValuesForDiff compares two values and collects differences
-func compareValuesForDiff(path string, target, live interface{}, added, removed *[]string) {
+// compareValues compares two values and adds differences to diffLines
+func compareValues(path string, target, live interface{}, diffLines *[]string) {
 	tMap, tIsMap := target.(map[string]interface{})
 	lMap, lIsMap := live.(map[string]interface{})
 	tSlice, tIsSlice := target.([]interface{})
 	lSlice, lIsSlice := live.([]interface{})
 
 	if tIsMap && lIsMap {
-		compareMapsForDiff(path, tMap, lMap, added, removed)
+		compareMaps(path, tMap, lMap, diffLines)
 	} else if tIsSlice && lIsSlice {
-		compareSlicesForDiff(path, tSlice, lSlice, added, removed)
+		compareSlices(path, tSlice, lSlice, diffLines)
 	} else if fmt.Sprintf("%v", target) != fmt.Sprintf("%v", live) {
-		*removed = append(*removed, fmt.Sprintf("%s: %v", path, live))
-		*added = append(*added, fmt.Sprintf("%s: %v", path, target))
+		*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v -> %v", path, live, target))
 	}
 }
 
-// compareSlicesForDiff compares two slices and collects differences
-func compareSlicesForDiff(path string, target, live []interface{}, added, removed *[]string) {
+// compareSlices compares two slices and adds differences to diffLines
+func compareSlices(path string, target, live []interface{}, diffLines *[]string) {
 	maxLen := len(target)
 	if len(live) > maxLen {
 		maxLen = len(live)
@@ -1233,45 +1247,13 @@ func compareSlicesForDiff(path string, target, live []interface{}, added, remove
 	for i := 0; i < maxLen; i++ {
 		itemPath := fmt.Sprintf("%s[%d]", path, i)
 		if i >= len(target) {
-			*added = append(*added, fmt.Sprintf("%s: %v", itemPath, live[i]))
+			*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v (ADDED)", itemPath, live[i]))
 		} else if i >= len(live) {
-			*removed = append(*removed, fmt.Sprintf("%s: %v", itemPath, target[i]))
+			*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v (REMOVED)", itemPath, target[i]))
 		} else {
-			compareValuesForDiff(itemPath, target[i], live[i], added, removed)
+			compareValues(itemPath, target[i], live[i], diffLines)
 		}
 	}
-}
-
-// formatYamlDiff formats the diff in YAML unified diff format
-func formatYamlDiff(original string, added, removed []string, isNew bool) string {
-	var diffLines []string
-
-	if isNew {
-		// Resource is new - show the entire YAML with "ADDED" prefix
-		lines := strings.Split(original, "\n")
-		for _, line := range lines {
-			diffLines = append(diffLines, "+ "+line)
-		}
-	} else if len(added) == 0 && len(removed) == 0 {
-		// No differences
-		return ""
-	} else {
-		// Build unified-style diff output
-		diffLines = append(diffLines, "--- desired")
-		diffLines = append(diffLines, "+++ current")
-
-		// Process removed items (show as -)
-		for _, item := range removed {
-			diffLines = append(diffLines, fmt.Sprintf("- %s", item))
-		}
-
-		// Process added items (show as +)
-		for _, item := range added {
-			diffLines = append(diffLines, fmt.Sprintf("+ %s", item))
-		}
-	}
-
-	return strings.Join(diffLines, "\n")
 }
 
 // jsonToYaml converts JSON string to YAML string
@@ -1293,7 +1275,12 @@ func jsonToYaml(jsonStr string) string {
 
 func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	name := String(arguments, "name", "")
+	resourceName := String(arguments, "resource_name", "")
+	group := String(arguments, "group", "")
+	kind := String(arguments, "kind", "")
+	namespace := String(arguments, "namespace", "")
 	limit := Int(arguments, "limit", MaxEvents)
+
 	query := &application.ApplicationResourceEventsQuery{
 		Name: &name,
 	}
@@ -1308,29 +1295,103 @@ func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments
 		return errorResult(fmt.Sprintf("Failed to parse events: %v", parseErr)), nil
 	}
 
-	total := len(events)
-	if len(events) > limit {
-		events = events[:limit]
+	// Filter events by resource if specified
+	var filteredEvents []interface{}
+	for _, event := range events {
+		eventMap, ok := event.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Check involvedObject for resource filtering
+		involvedObj, hasInvolved := eventMap["involvedObject"].(map[string]interface{})
+		if !hasInvolved {
+			// If no involvedObject, include the event unless filtering is active
+			if resourceName == "" && group == "" && kind == "" && namespace == "" {
+				filteredEvents = append(filteredEvents, event)
+			}
+			continue
+		}
+
+		// Apply filters
+		if resourceName != "" {
+			objName, _ := involvedObj["name"].(string)
+			if objName != resourceName {
+				continue
+			}
+		}
+		if group != "" {
+			objGroup, _ := involvedObj["group"].(string)
+			if objGroup != group {
+				continue
+			}
+		}
+		if kind != "" {
+			objKind, _ := involvedObj["kind"].(string)
+			if objKind != kind {
+				continue
+			}
+		}
+		if namespace != "" {
+			objNS, _ := involvedObj["namespace"].(string)
+			if objNS != namespace {
+				continue
+			}
+		}
+
+		filteredEvents = append(filteredEvents, event)
 	}
 
-	eventList := make([]interface{}, len(events))
-	for i, event := range events {
+	total := len(filteredEvents)
+	if len(filteredEvents) > limit {
+		filteredEvents = filteredEvents[:limit]
+	}
+
+	eventList := make([]interface{}, len(filteredEvents))
+	for i, event := range filteredEvents {
 		eventMap, ok := event.(map[string]interface{})
 		if !ok {
 			continue
 		}
 		eventList[i] = map[string]interface{}{
-			"type":      eventMap["type"],
-			"reason":    eventMap["reason"],
-			"message":   eventMap["message"],
-			"timestamp": eventMap["timestamp"],
+			"type":            eventMap["type"],
+			"reason":          eventMap["reason"],
+			"message":         eventMap["message"],
+			"timestamp":       eventMap["timestamp"],
+			"count":           eventMap["count"],
+			"first_timestamp": eventMap["firstTimestamp"],
+			"last_timestamp":  eventMap["lastTimestamp"],
+			"source":          eventMap["source"],
+			"resource": map[string]interface{}{
+				"name":      involvedObjField(eventMap, "name"),
+				"namespace": involvedObjField(eventMap, "namespace"),
+				"kind":      involvedObjField(eventMap, "kind"),
+				"group":     involvedObjField(eventMap, "group"),
+			},
 		}
 	}
 
 	return Result(map[string]interface{}{
-		"items": eventList,
-		"total": total,
+		"items":    eventList,
+		"total":    total,
+		"filtered": total != len(events),
+		"filter_used": map[string]interface{}{
+			"resource_name": resourceName,
+			"group":         group,
+			"kind":          kind,
+			"namespace":     namespace,
+		},
 	}, nil)
+}
+
+// involvedObjField safely extracts a field from involvedObject
+func involvedObjField(event map[string]interface{}, field string) string {
+	if involved, ok := event["involvedObject"].(map[string]interface{}); ok {
+		if val, ok := involved[field].(string); ok {
+			return val
+		}
+	}
+	return ""
 }
 
 func (tm *ToolManager) handleUpdateApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -2183,15 +2244,15 @@ func inferResourceVersion(group string) string {
 	// Common API groups and their typical versions
 	// Most stable Kubernetes resources use v1
 	commonV1Groups := map[string]bool{
-		"apps":           true,
-		"batch":          true,
-		"networking.k8s.io": true,
-		"policy":         true,
-		"storage.k8s.io":    true,
+		"apps":                      true,
+		"batch":                     true,
+		"networking.k8s.io":         true,
+		"policy":                    true,
+		"storage.k8s.io":            true,
 		"rbac.authorization.k8s.io": true,
-		"coordination.k8s.io": true,
-		"apiserverinternal.k8s.io": true,
-		"scheduling.k8s.io": true,
+		"coordination.k8s.io":       true,
+		"apiserverinternal.k8s.io":  true,
+		"scheduling.k8s.io":         true,
 	}
 
 	if commonV1Groups[group] {
@@ -2306,6 +2367,19 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 		})
 	}
 
+	// Format resources with sync status
+	resources := make([]map[string]interface{}, 0, len(app.Status.Resources))
+	for _, r := range app.Status.Resources {
+		resources = append(resources, map[string]interface{}{
+			"group":     r.Group,
+			"kind":      r.Kind,
+			"namespace": r.Namespace,
+			"name":      r.Name,
+			"status":    r.Status,
+			"health":    r.Health.Status,
+		})
+	}
+
 	return map[string]interface{}{
 		"name":              app.Name,
 		"project":           app.Spec.Project,
@@ -2323,6 +2397,7 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 		"operation_phase":   operationPhase,
 		"operation_message": operationMessage,
 		"conditions":        conditions,
+		"resources":         resources,
 	}
 }
 
