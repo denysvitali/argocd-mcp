@@ -1155,11 +1155,15 @@ func stripManagedFieldsYaml(jsonStr string) string {
 	return jsonToYaml(string(jsonBytes))
 }
 
-// computeDiff generates a human-readable diff between two YAML manifests
+// computeDiff generates a YAML diff in unified format between two YAML manifests
 func computeDiff(target, live string) string {
-	if target == "" || live == "" {
+	if target == "" {
 		return ""
 	}
+	if live == "" {
+		return formatYamlDiff(target, []string{}, []string{}, true)
+	}
+
 	// Parse both YAML documents
 	var targetMap, liveMap map[string]interface{}
 	if err := yaml.Unmarshal([]byte(target), &targetMap); err != nil {
@@ -1170,17 +1174,14 @@ func computeDiff(target, live string) string {
 	}
 
 	// Build diff by comparing values
-	var diffLines []string
-	compareMaps("", targetMap, liveMap, &diffLines)
+	var added, removed []string
+	compareMapsForDiff("", targetMap, liveMap, &added, &removed)
 
-	if len(diffLines) == 0 {
-		return ""
-	}
-	return strings.Join(diffLines, "\n")
+	return formatYamlDiff(target, added, removed, false)
 }
 
-// compareMaps recursively compares two maps and adds differences to diffLines
-func compareMaps(path string, target, live map[string]interface{}, diffLines *[]string) {
+// compareMapsForDiff recursively compares two maps and collects differences
+func compareMapsForDiff(path string, target, live map[string]interface{}, added, removed *[]string) {
 	// Check for removed or changed fields
 	for key, tVal := range target {
 		currentPath := key
@@ -1189,41 +1190,42 @@ func compareMaps(path string, target, live map[string]interface{}, diffLines *[]
 		}
 		lVal, exists := live[key]
 		if !exists {
-			*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v (REMOVED)", currentPath, tVal))
+			*removed = append(*removed, currentPath)
 		} else {
-			compareValues(currentPath, tVal, lVal, diffLines)
+			compareValuesForDiff(currentPath, tVal, lVal, added, removed)
 		}
 	}
 	// Check for added fields
-	for key, lVal := range live {
+	for key := range live {
 		if _, exists := target[key]; !exists {
 			currentPath := key
 			if path != "" {
 				currentPath = path + "." + key
 			}
-			*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v (ADDED)", currentPath, lVal))
+			*added = append(*added, currentPath)
 		}
 	}
 }
 
-// compareValues compares two values and adds differences to diffLines
-func compareValues(path string, target, live interface{}, diffLines *[]string) {
+// compareValuesForDiff compares two values and collects differences
+func compareValuesForDiff(path string, target, live interface{}, added, removed *[]string) {
 	tMap, tIsMap := target.(map[string]interface{})
 	lMap, lIsMap := live.(map[string]interface{})
 	tSlice, tIsSlice := target.([]interface{})
 	lSlice, lIsSlice := live.([]interface{})
 
 	if tIsMap && lIsMap {
-		compareMaps(path, tMap, lMap, diffLines)
+		compareMapsForDiff(path, tMap, lMap, added, removed)
 	} else if tIsSlice && lIsSlice {
-		compareSlices(path, tSlice, lSlice, diffLines)
+		compareSlicesForDiff(path, tSlice, lSlice, added, removed)
 	} else if fmt.Sprintf("%v", target) != fmt.Sprintf("%v", live) {
-		*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v -> %v", path, live, target))
+		*removed = append(*removed, fmt.Sprintf("%s: %v", path, live))
+		*added = append(*added, fmt.Sprintf("%s: %v", path, target))
 	}
 }
 
-// compareSlices compares two slices and adds differences to diffLines
-func compareSlices(path string, target, live []interface{}, diffLines *[]string) {
+// compareSlicesForDiff compares two slices and collects differences
+func compareSlicesForDiff(path string, target, live []interface{}, added, removed *[]string) {
 	maxLen := len(target)
 	if len(live) > maxLen {
 		maxLen = len(live)
@@ -1231,13 +1233,45 @@ func compareSlices(path string, target, live []interface{}, diffLines *[]string)
 	for i := 0; i < maxLen; i++ {
 		itemPath := fmt.Sprintf("%s[%d]", path, i)
 		if i >= len(target) {
-			*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v (ADDED)", itemPath, live[i]))
+			*added = append(*added, fmt.Sprintf("%s: %v", itemPath, live[i]))
 		} else if i >= len(live) {
-			*diffLines = append(*diffLines, fmt.Sprintf("  %s: %v (REMOVED)", itemPath, target[i]))
+			*removed = append(*removed, fmt.Sprintf("%s: %v", itemPath, target[i]))
 		} else {
-			compareValues(itemPath, target[i], live[i], diffLines)
+			compareValuesForDiff(itemPath, target[i], live[i], added, removed)
 		}
 	}
+}
+
+// formatYamlDiff formats the diff in YAML unified diff format
+func formatYamlDiff(original string, added, removed []string, isNew bool) string {
+	var diffLines []string
+
+	if isNew {
+		// Resource is new - show the entire YAML with "ADDED" prefix
+		lines := strings.Split(original, "\n")
+		for _, line := range lines {
+			diffLines = append(diffLines, "+ "+line)
+		}
+	} else if len(added) == 0 && len(removed) == 0 {
+		// No differences
+		return ""
+	} else {
+		// Build unified-style diff output
+		diffLines = append(diffLines, "--- desired")
+		diffLines = append(diffLines, "+++ current")
+
+		// Process removed items (show as -)
+		for _, item := range removed {
+			diffLines = append(diffLines, fmt.Sprintf("- %s", item))
+		}
+
+		// Process added items (show as +)
+		for _, item := range added {
+			diffLines = append(diffLines, fmt.Sprintf("+ %s", item))
+		}
+	}
+
+	return strings.Join(diffLines, "\n")
 }
 
 // jsonToYaml converts JSON string to YAML string
