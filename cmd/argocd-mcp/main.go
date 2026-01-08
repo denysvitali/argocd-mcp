@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 	"github.com/argocd-mcp/argocd-mcp/internal/config"
 	"github.com/argocd-mcp/argocd-mcp/tools"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -320,12 +322,128 @@ Or run interactively without flags:
 		},
 	}
 
+	// Call command - invoke tools directly from CLI
+	callCmd := &cobra.Command{
+		Use:   "call <tool-name> [arguments]",
+		Short: "Call an MCP tool directly from the command line",
+		Long: `Call an MCP tool directly from the command line.
+
+Arguments can be provided as JSON or as key=value pairs.
+
+Examples:
+  # Call with JSON argument
+  argocd-mcp call get_application '{"name": "searxng"}'
+
+  # Call with key=value pairs
+  argocd-mcp call list_applications project=workloads
+
+  # Call with stdin input
+  echo '{"name": "searxng"}' | argocd-mcp call get_application -
+
+  # List available tools
+  argocd-mcp call --list`,
+		Aliases: []string{"exec", "invoke"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			listOnly, _ := cmd.Flags().GetBool("list")
+			pretty, _ := cmd.Flags().GetBool("pretty")
+			output, _ := cmd.Flags().GetString("output")
+
+			// Load config and create client
+			cfg, err := config.LoadConfig(logger)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+
+			token := cfg.ArgoCD.Token
+			if token == "" && cfg.ArgoCD.Username != "" && cfg.ArgoCD.Password != "" {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+
+				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText)
+				if err != nil {
+					return fmt.Errorf("failed to get auth token: %w", err)
+				}
+			}
+
+			if token == "" {
+				return fmt.Errorf("authentication required")
+			}
+
+			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile)
+			if err != nil {
+				return fmt.Errorf("failed to create client: %w", err)
+			}
+
+			toolManager := tools.NewToolManager(argoClient, logger, cfg.Server.SafeMode)
+
+			if listOnly {
+				// List all available tools
+				serverTools := toolManager.GetServerTools()
+				fmt.Println("Available tools:")
+				for _, tool := range serverTools {
+					fmt.Printf("  %s\n", tool.Tool.Name)
+					if tool.Tool.Description != "" {
+						fmt.Printf("    %s\n", tool.Tool.Description)
+					}
+				}
+				return nil
+			}
+
+			if len(args) < 1 {
+				return fmt.Errorf("tool name required. Use --list to see available tools")
+			}
+
+			toolName := args[0]
+
+			// Parse arguments
+			var arguments map[string]interface{}
+			if len(args) > 1 {
+				// Parse remaining args as key=value pairs
+				arguments = make(map[string]interface{})
+				for _, arg := range args[1:] {
+					parts := splitOnce(arg, "=")
+					if len(parts) == 2 {
+						arguments[parts[0]] = parts[1]
+					}
+				}
+			} else if len(args) == 1 && args[0] != "-" {
+				// No arguments provided
+				arguments = make(map[string]interface{})
+			}
+
+			// Check if reading from stdin
+			if len(args) >= 1 && args[0] == "-" {
+				decoder := json.NewDecoder(os.Stdin)
+				if err := decoder.Decode(&arguments); err != nil {
+					return fmt.Errorf("failed to parse JSON from stdin: %w", err)
+				}
+			}
+
+			// Execute the tool
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+
+			result, err := toolManager.CallTool(ctx, toolName, arguments)
+			if err != nil {
+				return fmt.Errorf("tool call failed: %w", err)
+			}
+
+			// Output result
+			return outputResult(result, output, pretty)
+		},
+	}
+
+	callCmd.Flags().BoolP("list", "l", false, "List all available tools")
+	callCmd.Flags().BoolP("pretty", "p", true, "Pretty-print JSON output")
+	callCmd.Flags().StringP("output", "o", "json", "Output format: json or yaml")
+
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(configShowCmd)
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(testCmd)
+	rootCmd.AddCommand(callCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.Fatal(err)
@@ -352,4 +470,66 @@ func startServer(ctx context.Context, srv *server.MCPServer, tools []server.Serv
 	}
 
 	return nil
+}
+
+// splitOnce splits a string at the first occurrence of sep
+func splitOnce(s, sep string) []string {
+	if idx := findIndex(s, sep); idx >= 0 {
+		return []string{s[:idx], s[idx+len(sep):]}
+	}
+	return []string{s}
+}
+
+// findIndex returns the index of the first occurrence of sep in s
+func findIndex(s, sep string) int {
+	for i := 0; i <= len(s)-len(sep); i++ {
+		if s[i:i+len(sep)] == sep {
+			return i
+		}
+	}
+	return -1
+}
+
+// outputResult prints the tool result in the specified format
+func outputResult(result *mcp.CallToolResult, format string, pretty bool) error {
+	var data []byte
+	var err error
+
+	// Extract content from the result
+	output := extractResultContent(result)
+
+	if format == "yaml" {
+		data, err = yaml.Marshal(output)
+	} else {
+		if pretty {
+			data, err = json.MarshalIndent(output, "", "  ")
+		} else {
+			data, err = json.Marshal(output)
+		}
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to marshal output: %w", err)
+	}
+
+	fmt.Println(string(data))
+	return nil
+}
+
+// extractResultContent extracts the content from an MCP tool result
+func extractResultContent(result *mcp.CallToolResult) interface{} {
+	if result == nil {
+		return nil
+	}
+
+	// Check if there's an error
+	if result.IsError {
+		return map[string]interface{}{
+			"error": true,
+			"text":  result.Content,
+		}
+	}
+
+	// Return the content as-is (it should already be parsed as interface{})
+	return result.Content
 }

@@ -59,6 +59,32 @@ func (tm *ToolManager) GetServerTools() []server.ServerTool {
 	return serverTools
 }
 
+// CallTool calls a tool by name and returns the result
+func (tm *ToolManager) CallTool(ctx context.Context, name string, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	handler := tm.getToolHandler(name)
+	if handler == nil {
+		return nil, fmt.Errorf("unknown tool: %s", name)
+	}
+	// Create a proper CallToolRequest
+	request := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name:      name,
+			Arguments: arguments,
+		},
+	}
+	return handler(ctx, request)
+}
+
+// GetToolNames returns all available tool names
+func (tm *ToolManager) GetToolNames() []string {
+	tm.defineTools()
+	names := make([]string, len(tm.tools))
+	for i, tool := range tm.tools {
+		names[i] = tool.Name
+	}
+	return names
+}
+
 // defineTools defines all the MCP tools
 func (tm *ToolManager) defineTools() {
 	tm.tools = []mcp.Tool{
