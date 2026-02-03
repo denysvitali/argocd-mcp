@@ -2396,13 +2396,17 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 	// Format resources with sync status
 	resources := make([]map[string]interface{}, 0, len(app.Status.Resources))
 	for _, r := range app.Status.Resources {
+		healthStatus := ""
+		if r.Health != nil {
+			healthStatus = string(r.Health.Status)
+		}
 		resources = append(resources, map[string]interface{}{
 			"group":     r.Group,
 			"kind":      r.Kind,
 			"namespace": r.Namespace,
 			"name":      r.Name,
 			"status":    r.Status,
-			"health":    r.Health.Status,
+			"health":    healthStatus,
 		})
 	}
 
