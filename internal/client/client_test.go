@@ -13,7 +13,7 @@ func TestNewClient(t *testing.T) {
 	logger := logrus.New()
 	// Use an invalid server URL - the client creation may or may not fail immediately
 	// depending on the apiclient implementation, but we test both cases
-	client, err := NewClient(logger, "http://invalid:9999", "test-token", true, "")
+	client, err := NewClient(logger, "http://invalid:9999", "test-token", true, false, "", false, "")
 	// Client creation may succeed but operations will fail - verify struct is valid
 	if err == nil {
 		assert.NotNil(t, client)
@@ -26,7 +26,7 @@ func TestNewClient(t *testing.T) {
 
 func TestWaitForRateLimit_Cancelled(t *testing.T) {
 	logger := logrus.New()
-	client, err := NewClient(logger, "http://localhost:8080", "test-token", true, "")
+	client, err := NewClient(logger, "http://localhost:8080", "test-token", true, false, "", false, "")
 	require.NoError(t, err)
 
 	// Create a cancelled context

@@ -36,19 +36,29 @@ type Client struct {
 }
 
 // NewClient creates a new ArgoCD client
-func NewClient(logger *logrus.Logger, server, token string, insecure, plaintext bool, certFile string) (*Client, error) {
+func NewClient(logger *logrus.Logger, server, token string, insecure, plaintext bool, certFile string, grpcWeb bool, grpcWebRootPath string) (*Client, error) {
+	logger.Debugf("Creating ArgoCD client for server: %s", server)
+	logger.Debugf("Client options - Insecure: %v, PlainText: %v, GRPCWeb: %v, GRPCWebRootPath: %s", insecure, plaintext, grpcWeb, grpcWebRootPath)
+
 	opts := &apiclient.ClientOptions{
-		ServerAddr: server,
-		AuthToken:  token,
-		Insecure:   insecure,
-		PlainText:  plaintext,
-		CertFile:   certFile,
+		ServerAddr:      server,
+		AuthToken:       token,
+		Insecure:        insecure,
+		PlainText:       plaintext,
+		CertFile:        certFile,
+		GRPCWeb:         grpcWeb,
+		GRPCWebRootPath: grpcWebRootPath,
 	}
+
+	logger.Debug("Initializing ArgoCD API client...")
 
 	argoClient, err := apiclient.NewClient(opts)
 	if err != nil {
+		logger.Debugf("Failed to create ArgoCD client: %v", err)
 		return nil, fmt.Errorf("failed to create ArgoCD client: %w", err)
 	}
+
+	logger.Debug("ArgoCD client created successfully")
 
 	// Rate limiter: 10 requests per second with burst of 20
 	limiter := rate.NewLimiter(rateLimitRequests, rateLimitBurst)

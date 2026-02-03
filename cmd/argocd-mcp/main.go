@@ -88,7 +88,7 @@ The server communicates over stdio by default.`,
 				defer cancel()
 
 				var err error
-				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText)
+				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
 				if err != nil {
 					return fmt.Errorf("failed to get auth token: %w", err)
 				}
@@ -99,7 +99,7 @@ The server communicates over stdio by default.`,
 			}
 
 			// Create client
-			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile)
+			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
@@ -285,6 +285,14 @@ Or run interactively without flags:
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
+			// Set log level
+			logLevel, err := logrus.ParseLevel(cfg.Logging.Level)
+			if err != nil {
+				logger.Warnf("Invalid log level '%s', using default 'info': %v", cfg.Logging.Level, err)
+				logLevel = logrus.InfoLevel
+			}
+			logger.SetLevel(logLevel)
+
 			auth.PrintInfo(fmt.Sprintf("Connecting to ArgoCD at %s...", cfg.ArgoCD.Server))
 
 			token := cfg.ArgoCD.Token
@@ -293,7 +301,7 @@ Or run interactively without flags:
 				defer cancel()
 
 				var err error
-				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText)
+				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
 				if err != nil {
 					return fmt.Errorf("failed to get auth token: %w", err)
 				}
@@ -303,7 +311,7 @@ Or run interactively without flags:
 				return fmt.Errorf("authentication required")
 			}
 
-			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile)
+			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
@@ -354,12 +362,20 @@ Examples:
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
+			// Set log level
+			logLevel, err := logrus.ParseLevel(cfg.Logging.Level)
+			if err != nil {
+				logger.Warnf("Invalid log level '%s', using default 'info': %v", cfg.Logging.Level, err)
+				logLevel = logrus.InfoLevel
+			}
+			logger.SetLevel(logLevel)
+
 			token := cfg.ArgoCD.Token
 			if token == "" && cfg.ArgoCD.Username != "" && cfg.ArgoCD.Password != "" {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 
-				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText)
+				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
 				if err != nil {
 					return fmt.Errorf("failed to get auth token: %w", err)
 				}
@@ -369,7 +385,7 @@ Examples:
 				return fmt.Errorf("authentication required")
 			}
 
-			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile)
+			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}

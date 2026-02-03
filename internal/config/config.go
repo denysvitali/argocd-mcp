@@ -15,14 +15,16 @@ type Config struct {
 }
 
 type ArgoCDConfig struct {
-	Server   string `mapstructure:"server"`
-	AuthURL  string `mapstructure:"auth_url"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
-	Token    string `mapstructure:"token"`
-	Insecure bool   `mapstructure:"insecure"`
-	PlainText bool   `mapstructure:"plaintext"`
-	CertFile string `mapstructure:"cert_file"`
+	Server          string `mapstructure:"server"`
+	AuthURL         string `mapstructure:"auth_url"`
+	Username        string `mapstructure:"username"`
+	Password        string `mapstructure:"password"`
+	Token           string `mapstructure:"token"`
+	Insecure        bool   `mapstructure:"insecure"`
+	PlainText       bool   `mapstructure:"plaintext"`
+	CertFile        string `mapstructure:"cert_file"`
+	GRPCWeb         bool   `mapstructure:"grpc_web"`
+	GRPCWebRootPath string `mapstructure:"grpc_web_root_path"`
 }
 
 type ServerConfig struct {
