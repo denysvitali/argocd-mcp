@@ -33,3 +33,5 @@ Thumbs.db
 
 # Temporary
 *~
+
+.claude/settings.local.json

@@ -65,10 +65,22 @@ This server provides MCP tools for interacting with ArgoCD, including:
 		Long: `Start the ArgoCD MCP server.
 
 The server communicates over stdio by default.`,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Return nil to continue
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadConfig(logger)
 			if err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
+			}
+
+			// Override from CLI flags if set
+			if grpcWeb, _ := cmd.Flags().GetBool("grpc-web"); grpcWeb {
+				cfg.ArgoCD.GRPCWeb = grpcWeb
+			}
+			if grpcWebRootPath, _ := cmd.Flags().GetString("grpc-web-root-path"); grpcWebRootPath != "" {
+				cfg.ArgoCD.GRPCWebRootPath = grpcWebRootPath
 			}
 
 			// Set log level
@@ -128,6 +140,10 @@ The server communicates over stdio by default.`,
 		},
 	}
 
+	// Add gRPC-Web flags to serveCmd
+	serveCmd.Flags().Bool("grpc-web", false, "Enable gRPC-Web mode (use when ArgoCD is behind a reverse proxy that doesn't support native gRPC)")
+	serveCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests (e.g., /argo-cd)")
+
 	// Config init command
 	configCmd := &cobra.Command{
 		Use:   "config init",
@@ -148,6 +164,8 @@ Or run interactively without flags:
 			insecure, _ := cmd.Flags().GetBool("insecure")
 			plaintext, _ := cmd.Flags().GetBool("plaintext")
 			certFile, _ := cmd.Flags().GetString("cert-file")
+			grpcWeb, _ := cmd.Flags().GetBool("grpc-web")
+			grpcWebRootPath, _ := cmd.Flags().GetString("grpc-web-root-path")
 
 			// Interactive mode if no flags provided
 			interactive := server == "" && username == "" && password == "" && token == ""
@@ -179,13 +197,15 @@ Or run interactively without flags:
 			// Create config structure
 			cfg := config.Config{
 				ArgoCD: config.ArgoCDConfig{
-					Server:    server,
-					Username:  username,
-					Password:  password,
-					Token:     token,
-					Insecure:  insecure,
-					PlainText: plaintext,
-					CertFile:  certFile,
+					Server:          server,
+					Username:        username,
+					Password:        password,
+					Token:           token,
+					Insecure:        insecure,
+					PlainText:       plaintext,
+					CertFile:        certFile,
+					GRPCWeb:         grpcWeb,
+					GRPCWebRootPath: grpcWebRootPath,
 				},
 				Server: config.ServerConfig{
 					MCPEndpoint: "stdio",
@@ -239,6 +259,8 @@ Or run interactively without flags:
 	configCmd.Flags().BoolP("insecure", "k", false, "Skip TLS certificate verification")
 	configCmd.Flags().BoolP("plaintext", "", false, "Use HTTP without TLS (for testing only)")
 	configCmd.Flags().StringP("cert-file", "c", "", "Path to CA certificate file")
+	configCmd.Flags().Bool("grpc-web", false, "Enable gRPC-Web mode (use when ArgoCD is behind a reverse proxy that doesn't support native gRPC)")
+	configCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests (e.g., /argo-cd)")
 
 	// Config show command
 	configShowCmd := &cobra.Command{
@@ -255,6 +277,10 @@ Or run interactively without flags:
 			fmt.Println("=====================")
 			fmt.Printf("Server: %s\n", cfg.ArgoCD.Server)
 			fmt.Printf("Insecure: %t\n", cfg.ArgoCD.Insecure)
+			fmt.Printf("gRPC-Web: %t\n", cfg.ArgoCD.GRPCWeb)
+			if cfg.ArgoCD.GRPCWebRootPath != "" {
+				fmt.Printf("gRPC-Web Root Path: %s\n", cfg.ArgoCD.GRPCWebRootPath)
+			}
 			fmt.Printf("MCP Endpoint: %s\n", cfg.Server.MCPEndpoint)
 			if cfg.ArgoCD.Token != "" {
 				fmt.Printf("Token: %s\n", auth.MaskToken(cfg.ArgoCD.Token))
@@ -283,6 +309,14 @@ Or run interactively without flags:
 			cfg, err := config.LoadConfig(logger)
 			if err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
+			}
+
+			// Override from CLI flags if set
+			if grpcWeb, _ := cmd.Flags().GetBool("grpc-web"); grpcWeb {
+				cfg.ArgoCD.GRPCWeb = grpcWeb
+			}
+			if grpcWebRootPath, _ := cmd.Flags().GetString("grpc-web-root-path"); grpcWebRootPath != "" {
+				cfg.ArgoCD.GRPCWebRootPath = grpcWebRootPath
 			}
 
 			// Set log level
@@ -330,6 +364,10 @@ Or run interactively without flags:
 		},
 	}
 
+	// Add gRPC-Web flags to testCmd
+	testCmd.Flags().Bool("grpc-web", false, "Enable gRPC-Web mode (use when ArgoCD is behind a reverse proxy that doesn't support native gRPC)")
+	testCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests (e.g., /argo-cd)")
+
 	// Call command - invoke tools directly from CLI
 	callCmd := &cobra.Command{
 		Use:   "call <tool-name> [arguments]",
@@ -360,6 +398,14 @@ Examples:
 			cfg, err := config.LoadConfig(logger)
 			if err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
+			}
+
+			// Override from CLI flags if set
+			if grpcWeb, _ := cmd.Flags().GetBool("grpc-web"); grpcWeb {
+				cfg.ArgoCD.GRPCWeb = grpcWeb
+			}
+			if grpcWebRootPath, _ := cmd.Flags().GetString("grpc-web-root-path"); grpcWebRootPath != "" {
+				cfg.ArgoCD.GRPCWebRootPath = grpcWebRootPath
 			}
 
 			// Set log level
@@ -452,6 +498,8 @@ Examples:
 	callCmd.Flags().BoolP("list", "l", false, "List all available tools")
 	callCmd.Flags().BoolP("pretty", "p", true, "Pretty-print JSON output")
 	callCmd.Flags().StringP("output", "o", "json", "Output format: json or yaml")
+	callCmd.Flags().Bool("grpc-web", false, "Enable gRPC-Web mode (use when ArgoCD is behind a reverse proxy that doesn't support native gRPC)")
+	callCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests (e.g., /argo-cd)")
 
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(serveCmd)

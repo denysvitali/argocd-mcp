@@ -78,6 +78,12 @@ func LoadConfig(logger *logrus.Logger) (*Config, error) {
 	if token := v.GetString("token"); token != "" {
 		cfg.ArgoCD.Token = token
 	}
+	if grpcWeb := v.GetBool("grpc-web"); grpcWeb {
+		cfg.ArgoCD.GRPCWeb = grpcWeb
+	}
+	if grpcWebRootPath := v.GetString("grpc-web-root-path"); grpcWebRootPath != "" {
+		cfg.ArgoCD.GRPCWebRootPath = grpcWebRootPath
+	}
 
 	return &cfg, nil
 }

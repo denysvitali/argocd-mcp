@@ -41,6 +41,11 @@ logging:
 		defer os.Chdir(originalDir)
 		os.Chdir(tempDir)
 
+		// Override HOME to prevent loading user config
+		originalHome := os.Getenv("HOME")
+		os.Setenv("HOME", tempDir)
+		defer os.Setenv("HOME", originalHome)
+
 		cfg, err := LoadConfig(logger)
 		require.NoError(t, err)
 		assert.Equal(t, "argocd.example.com", cfg.ArgoCD.Server)
@@ -64,6 +69,11 @@ argocd:
 		defer os.Chdir(originalDir)
 		os.Chdir(tempDir)
 
+		// Override HOME to prevent loading user config
+		originalHome := os.Getenv("HOME")
+		os.Setenv("HOME", tempDir)
+		defer os.Setenv("HOME", originalHome)
+
 		cfg, err := LoadConfig(logger)
 		require.NoError(t, err)
 		assert.Equal(t, "info", cfg.Logging.Level)
@@ -81,6 +91,11 @@ func TestLoadConfig_DefaultValues(t *testing.T) {
 	require.NoError(t, err)
 	defer os.Chdir(originalDir)
 	os.Chdir(tempDir)
+
+	// Override HOME to prevent loading any user config
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
 
 	cfg, err := LoadConfig(logger)
 	require.NoError(t, err)
@@ -114,6 +129,11 @@ argocd:
 	require.NoError(t, err)
 	defer os.Chdir(originalDir)
 	os.Chdir(tempDir)
+
+	// Override HOME to prevent loading user config
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
 
 	// LoadConfig should handle the error gracefully
 	// viper may not strictly fail on YAML parse errors in all versions
@@ -159,6 +179,11 @@ logging:
 		require.NoError(t, err)
 		defer os.Chdir(originalDir)
 		os.Chdir(tempDir)
+
+		// Override HOME to prevent loading user config
+		originalHome := os.Getenv("HOME")
+		os.Setenv("HOME", tempDir)
+		defer os.Setenv("HOME", originalHome)
 
 		cfg, err := LoadConfig(logger)
 		require.NoError(t, err)
