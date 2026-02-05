@@ -1186,9 +1186,7 @@ func stripManagedFieldsYaml(jsonStr string) string {
 		return jsonToYaml(jsonStr)
 	}
 	// Remove managedFields if present
-	if _, ok := data["managedFields"]; ok {
-		delete(data, "managedFields")
-	}
+	delete(data, "managedFields")
 	// Re-marshal to JSON then to YAML
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {

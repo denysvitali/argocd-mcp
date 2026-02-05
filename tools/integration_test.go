@@ -33,14 +33,14 @@ type ToolTestItem struct {
 
 // ApplicationDetail represents application details
 type ApplicationDetail struct {
-	Name     string `json:"name"`
-	Project  string `json:"project"`
-	RepoURL  string `json:"repo_url"`
-	Path     string `json:"path"`
-	Server   string `json:"server"`
-	NS       string `json:"namespace"`
-	Status   string `json:"status"`
-	Health   string `json:"health"`
+	Name       string `json:"name"`
+	Project    string `json:"project"`
+	RepoURL    string `json:"repo_url"`
+	Path       string `json:"path"`
+	Server     string `json:"server"`
+	NS         string `json:"namespace"`
+	Status     string `json:"status"`
+	Health     string `json:"health"`
 	SyncStatus struct {
 		Revision string `json:"revision"`
 	} `json:"sync_status"`
@@ -58,9 +58,9 @@ type ProjectDetail struct {
 
 // ClusterDetail represents cluster details
 type ClusterDetail struct {
-	Server         string `json:"server"`
-	Name           string `json:"name"`
-	ConnState      map[string]any `json:"connection_state"`
+	Server    string         `json:"server"`
+	Name      string         `json:"name"`
+	ConnState map[string]any `json:"connection_state"`
 }
 
 // ManifestsResult represents manifests result
