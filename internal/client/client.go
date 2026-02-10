@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient"
@@ -16,6 +17,16 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
 )
+
+// MaxLogEntries is the maximum number of log entries to return
+const MaxLogEntries = 500
+
+// ApplicationLogEntry represents a single log entry from an application pod
+type ApplicationLogEntry struct {
+	Content   string `json:"content"`
+	Timestamp string `json:"timestamp,omitempty"`
+	PodName   string `json:"pod_name,omitempty"`
+}
 
 // Rate limiting constants
 const (
@@ -216,6 +227,47 @@ func (c *Client) GetApplicationEvents(ctx context.Context, query *application.Ap
 	defer closer.Close()
 
 	return appClient.ListResourceEvents(ctx, query)
+}
+
+// GetApplicationLogs retrieves logs from a pod or resource in an application
+func (c *Client) GetApplicationLogs(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]ApplicationLogEntry, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appClient, err := c.client.NewApplicationClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create app client: %w", err)
+	}
+	defer closer.Close()
+
+	stream, err := appClient.PodLogs(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pod logs: %w", err)
+	}
+
+	var entries []ApplicationLogEntry
+	for {
+		entry, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error receiving logs: %w", err)
+		}
+
+		entries = append(entries, ApplicationLogEntry{
+			Content:   entry.GetContent(),
+			Timestamp: entry.GetTimeStampStr(),
+			PodName:   entry.GetPodName(),
+		})
+
+		// Safety limit to prevent context explosion
+		if len(entries) >= MaxLogEntries {
+			break
+		}
+	}
+	return entries, nil
 }
 
 // GetManagedResources returns the managed resources for an application with diff information

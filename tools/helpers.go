@@ -134,6 +134,21 @@ func Int(arguments map[string]interface{}, key string, defaultValue int) int {
 	return defaultValue
 }
 
+// Int64 returns the int64 value of the argument
+func Int64(arguments map[string]interface{}, key string, defaultValue int64) int64 {
+	if val, ok := arguments[key]; ok {
+		switch v := val.(type) {
+		case float64:
+			return int64(v)
+		case int:
+			return int64(v)
+		case int64:
+			return v
+		}
+	}
+	return defaultValue
+}
+
 // Float64 returns the float64 value of the argument
 func Float64(arguments map[string]interface{}, key string, defaultValue float64) float64 {
 	if val, ok := arguments[key]; ok {

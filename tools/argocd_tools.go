@@ -482,6 +482,60 @@ func (tm *ToolManager) defineTools() {
 				Required: []string{"name", "kind", "resource_name"},
 			},
 		},
+		{
+			Name:        "get_logs",
+			Description: "Get logs from pods/resources in an application",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+					"namespace": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource namespace",
+					},
+					"pod_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Specific pod name (optional, can infer from kind/resource_name)",
+					},
+					"container": map[string]interface{}{
+						"type":        "string",
+						"description": "Container name (optional, defaults to first container)",
+					},
+					"kind": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource kind (e.g., Pod, Deployment)",
+					},
+					"group": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource group (e.g., apps, core)",
+					},
+					"resource_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource name",
+					},
+					"tail_lines": map[string]interface{}{
+						"type":        "integer",
+						"description": "Number of lines to return (default: 100, max: 500)",
+					},
+					"since_seconds": map[string]interface{}{
+						"type":        "integer",
+						"description": "Show logs since N seconds ago",
+					},
+					"filter": map[string]interface{}{
+						"type":        "string",
+						"description": "Regex pattern to filter log lines",
+					},
+					"previous": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Return previous terminated container logs (default: false)",
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
 		// Project tools
 		{
 			Name:        "list_projects",
@@ -901,6 +955,8 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return tm.handlePatchApplicationResource(ctx, arguments)
 		case "delete_application_resource":
 			return tm.handleDeleteApplicationResource(ctx, arguments)
+		case "get_logs":
+			return tm.handleGetLogs(ctx, arguments)
 		case "list_projects":
 			return tm.handleListProjects(ctx, arguments)
 		case "get_project":
@@ -1702,6 +1758,93 @@ func (tm *ToolManager) handleDeleteApplicationResource(ctx context.Context, argu
 	return Result(map[string]interface{}{
 		"message": fmt.Sprintf("Resource %s/%s deleted successfully", kind, resourceName),
 		"success": true,
+	}, nil)
+}
+
+func (tm *ToolManager) handleGetLogs(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	name := String(arguments, "name", "")
+	namespace := String(arguments, "namespace", "")
+	podName := String(arguments, "pod_name", "")
+	container := String(arguments, "container", "")
+	kind := String(arguments, "kind", "")
+	group := String(arguments, "group", "")
+	resourceName := String(arguments, "resource_name", "")
+	tailLines := Int(arguments, "tail_lines", 100)
+	sinceSeconds := Int64(arguments, "since_seconds", 0)
+	filter := String(arguments, "filter", "")
+	previous := Bool(arguments, "previous", false)
+
+	// Limit tail_lines to prevent context explosion
+	if tailLines > client.MaxLogEntries {
+		tailLines = client.MaxLogEntries
+	}
+	if tailLines <= 0 {
+		tailLines = 100
+	}
+
+	// Build the query
+	query := &application.ApplicationPodLogsQuery{
+		Name: &name,
+	}
+
+	if namespace != "" {
+		query.Namespace = &namespace
+	}
+	if podName != "" {
+		query.PodName = &podName
+	}
+	if container != "" {
+		query.Container = &container
+	}
+	if kind != "" {
+		query.Kind = &kind
+	}
+	if group != "" {
+		query.Group = &group
+	}
+	if resourceName != "" {
+		query.ResourceName = &resourceName
+	}
+
+	tailLinesInt64 := int64(tailLines)
+	query.TailLines = &tailLinesInt64
+
+	if sinceSeconds > 0 {
+		query.SinceSeconds = &sinceSeconds
+	}
+	if filter != "" {
+		query.Filter = &filter
+	}
+
+	previousBool := previous
+	query.Previous = &previousBool
+
+	// Get logs from the client
+	entries, err := tm.client.GetApplicationLogs(ctx, query)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	// Determine truncation status
+	truncated := len(entries) >= client.MaxLogEntries
+
+	// Build response
+	logEntries := make([]interface{}, len(entries))
+	for i, entry := range entries {
+		logEntries[i] = map[string]interface{}{
+			"content":   entry.Content,
+			"timestamp": entry.Timestamp,
+			"pod_name":  entry.PodName,
+		}
+	}
+
+	return Result(map[string]interface{}{
+		"application": name,
+		"pod_name":    podName,
+		"container":   container,
+		"logs":        logEntries,
+		"total_lines": len(entries),
+		"truncated":   truncated,
 	}, nil)
 }
 
