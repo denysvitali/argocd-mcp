@@ -27,7 +27,7 @@ type MockArgoClient struct {
 	GetApplicationLogsFn      func(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error)
 	GetManagedResourcesFn     func(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
 	ListResourceActionsFn     func(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
-	RunResourceActionFn       func(ctx context.Context, actionReq *application.ResourceActionRunRequest) error
+	RunResourceActionFn       func(ctx context.Context, actionReq *application.ResourceActionRunRequest) error //nolint:staticcheck
 	GetApplicationResourceFn  func(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error)
 	PatchApplicationResourceFn func(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error)
 	DeleteApplicationResourceFn func(ctx context.Context, deleteReq *application.ApplicationResourceDeleteRequest) error
@@ -199,7 +199,8 @@ func (m *MockArgoClient) ListResourceActions(ctx context.Context, query *applica
 	return nil, fmt.Errorf("ListResourceActions not mocked")
 }
 
-func (m *MockArgoClient) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error {
+//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
+func (m *MockArgoClient) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error { //nolint:staticcheck
 	m.RunResourceActionCalls = append(m.RunResourceActionCalls, &MockCall{Args: actionReq})
 	if m.RunResourceActionFn != nil {
 		return m.RunResourceActionFn(ctx, actionReq)

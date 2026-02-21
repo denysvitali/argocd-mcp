@@ -719,7 +719,7 @@ func TestHandleListResourceActions(t *testing.T) {
 func TestHandleRunResourceAction(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mock := &MockArgoClient{
-			RunResourceActionFn: func(_ context.Context, _ *application.ResourceActionRunRequest) error {
+			RunResourceActionFn: func(_ context.Context, _ *application.ResourceActionRunRequest) error { //nolint:staticcheck
 				return nil
 			},
 		}
