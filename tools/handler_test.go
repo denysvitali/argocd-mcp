@@ -464,7 +464,7 @@ func TestHandleUpdateApplication(t *testing.T) {
 		}
 		tm := testToolManager(mock, false)
 		result, err := tm.CallTool(context.Background(), "update_application", map[string]interface{}{
-			"name":    "nosource",
+			"name":     "nosource",
 			"repo_url": "https://github.com/new/repo",
 		})
 		require.NoError(t, err)

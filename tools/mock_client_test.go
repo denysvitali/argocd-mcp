@@ -28,71 +28,71 @@ type MockArgoClient struct {
 	GetManagedResourcesFn     func(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
 	ListResourceActionsFn     func(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
 	//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
-	RunResourceActionFn func(ctx context.Context, actionReq *application.ResourceActionRunRequest) error
-	GetApplicationResourceFn  func(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error)
-	PatchApplicationResourceFn func(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error)
+	RunResourceActionFn         func(ctx context.Context, actionReq *application.ResourceActionRunRequest) error
+	GetApplicationResourceFn    func(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error)
+	PatchApplicationResourceFn  func(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error)
 	DeleteApplicationResourceFn func(ctx context.Context, deleteReq *application.ApplicationResourceDeleteRequest) error
 
 	// Project methods
-	ListProjectsFn   func(ctx context.Context, query *project.ProjectQuery) (*v1alpha1.AppProjectList, error)
-	GetProjectFn     func(ctx context.Context, query *project.ProjectQuery) (*v1alpha1.AppProject, error)
-	CreateProjectFn  func(ctx context.Context, createReq *project.ProjectCreateRequest) (*v1alpha1.AppProject, error)
-	UpdateProjectFn  func(ctx context.Context, updateReq *project.ProjectUpdateRequest) (*v1alpha1.AppProject, error)
-	DeleteProjectFn  func(ctx context.Context, query *project.ProjectQuery) error
+	ListProjectsFn     func(ctx context.Context, query *project.ProjectQuery) (*v1alpha1.AppProjectList, error)
+	GetProjectFn       func(ctx context.Context, query *project.ProjectQuery) (*v1alpha1.AppProject, error)
+	CreateProjectFn    func(ctx context.Context, createReq *project.ProjectCreateRequest) (*v1alpha1.AppProject, error)
+	UpdateProjectFn    func(ctx context.Context, updateReq *project.ProjectUpdateRequest) (*v1alpha1.AppProject, error)
+	DeleteProjectFn    func(ctx context.Context, query *project.ProjectQuery) error
 	GetProjectEventsFn func(ctx context.Context, query *project.ProjectQuery) (interface{}, error)
 
 	// Repository methods
-	ListRepositoriesFn func(ctx context.Context, query *repository.RepoQuery) (*v1alpha1.RepositoryList, error)
-	GetRepositoryFn    func(ctx context.Context, query *repository.RepoQuery) (*v1alpha1.Repository, error)
-	CreateRepositoryFn func(ctx context.Context, createReq *repository.RepoCreateRequest) (*v1alpha1.Repository, error)
-	UpdateRepositoryFn func(ctx context.Context, updateReq *repository.RepoUpdateRequest) (*v1alpha1.Repository, error)
-	DeleteRepositoryFn func(ctx context.Context, query *repository.RepoQuery) error
+	ListRepositoriesFn         func(ctx context.Context, query *repository.RepoQuery) (*v1alpha1.RepositoryList, error)
+	GetRepositoryFn            func(ctx context.Context, query *repository.RepoQuery) (*v1alpha1.Repository, error)
+	CreateRepositoryFn         func(ctx context.Context, createReq *repository.RepoCreateRequest) (*v1alpha1.Repository, error)
+	UpdateRepositoryFn         func(ctx context.Context, updateReq *repository.RepoUpdateRequest) (*v1alpha1.Repository, error)
+	DeleteRepositoryFn         func(ctx context.Context, query *repository.RepoQuery) error
 	ValidateRepositoryAccessFn func(ctx context.Context, query *repository.RepoAccessQuery) error
 
 	// Cluster methods
-	ListClustersFn   func(ctx context.Context, query *cluster.ClusterQuery) (*v1alpha1.ClusterList, error)
-	GetClusterFn     func(ctx context.Context, query *cluster.ClusterQuery) (*v1alpha1.Cluster, error)
-	CreateClusterFn  func(ctx context.Context, createReq *cluster.ClusterCreateRequest) (*v1alpha1.Cluster, error)
-	UpdateClusterFn  func(ctx context.Context, updateReq *cluster.ClusterUpdateRequest) (*v1alpha1.Cluster, error)
-	DeleteClusterFn  func(ctx context.Context, query *cluster.ClusterQuery) error
+	ListClustersFn  func(ctx context.Context, query *cluster.ClusterQuery) (*v1alpha1.ClusterList, error)
+	GetClusterFn    func(ctx context.Context, query *cluster.ClusterQuery) (*v1alpha1.Cluster, error)
+	CreateClusterFn func(ctx context.Context, createReq *cluster.ClusterCreateRequest) (*v1alpha1.Cluster, error)
+	UpdateClusterFn func(ctx context.Context, updateReq *cluster.ClusterUpdateRequest) (*v1alpha1.Cluster, error)
+	DeleteClusterFn func(ctx context.Context, query *cluster.ClusterQuery) error
 
 	// Call tracking
-	ListApplicationsCalls        []*MockCall
-	GetApplicationCalls          []*MockCall
-	CreateApplicationCalls       []*MockCall
-	UpdateApplicationCalls       []*MockCall
-	DeleteApplicationCalls       []*MockCall
-	SyncApplicationCalls         []*MockCall
-	GetApplicationManifestsCalls []*MockCall
-	RollbackApplicationCalls     []*MockCall
-	GetApplicationEventsCalls    []*MockCall
-	GetApplicationLogsCalls      []*MockCall
-	GetManagedResourcesCalls     []*MockCall
-	ListResourceActionsCalls     []*MockCall
-	RunResourceActionCalls       []*MockCall
-	GetApplicationResourceCalls  []*MockCall
-	PatchApplicationResourceCalls []*MockCall
+	ListApplicationsCalls          []*MockCall
+	GetApplicationCalls            []*MockCall
+	CreateApplicationCalls         []*MockCall
+	UpdateApplicationCalls         []*MockCall
+	DeleteApplicationCalls         []*MockCall
+	SyncApplicationCalls           []*MockCall
+	GetApplicationManifestsCalls   []*MockCall
+	RollbackApplicationCalls       []*MockCall
+	GetApplicationEventsCalls      []*MockCall
+	GetApplicationLogsCalls        []*MockCall
+	GetManagedResourcesCalls       []*MockCall
+	ListResourceActionsCalls       []*MockCall
+	RunResourceActionCalls         []*MockCall
+	GetApplicationResourceCalls    []*MockCall
+	PatchApplicationResourceCalls  []*MockCall
 	DeleteApplicationResourceCalls []*MockCall
 
-	ListProjectsCalls   []*MockCall
-	GetProjectCalls     []*MockCall
-	CreateProjectCalls  []*MockCall
-	UpdateProjectCalls  []*MockCall
-	DeleteProjectCalls  []*MockCall
+	ListProjectsCalls     []*MockCall
+	GetProjectCalls       []*MockCall
+	CreateProjectCalls    []*MockCall
+	UpdateProjectCalls    []*MockCall
+	DeleteProjectCalls    []*MockCall
 	GetProjectEventsCalls []*MockCall
 
-	ListRepositoriesCalls []*MockCall
-	GetRepositoryCalls    []*MockCall
-	CreateRepositoryCalls []*MockCall
-	UpdateRepositoryCalls []*MockCall
-	DeleteRepositoryCalls []*MockCall
+	ListRepositoriesCalls         []*MockCall
+	GetRepositoryCalls            []*MockCall
+	CreateRepositoryCalls         []*MockCall
+	UpdateRepositoryCalls         []*MockCall
+	DeleteRepositoryCalls         []*MockCall
 	ValidateRepositoryAccessCalls []*MockCall
 
-	ListClustersCalls   []*MockCall
-	GetClusterCalls     []*MockCall
-	CreateClusterCalls  []*MockCall
-	UpdateClusterCalls  []*MockCall
-	DeleteClusterCalls  []*MockCall
+	ListClustersCalls  []*MockCall
+	GetClusterCalls    []*MockCall
+	CreateClusterCalls []*MockCall
+	UpdateClusterCalls []*MockCall
+	DeleteClusterCalls []*MockCall
 }
 
 // MockCall represents a method call with its arguments.
