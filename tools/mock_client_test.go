@@ -27,7 +27,8 @@ type MockArgoClient struct {
 	GetApplicationLogsFn      func(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error)
 	GetManagedResourcesFn     func(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
 	ListResourceActionsFn     func(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
-	RunResourceActionFn       func(ctx context.Context, actionReq *application.ResourceActionRunRequest) error //nolint:staticcheck
+	//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
+	RunResourceActionFn func(ctx context.Context, actionReq *application.ResourceActionRunRequest) error
 	GetApplicationResourceFn  func(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error)
 	PatchApplicationResourceFn func(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error)
 	DeleteApplicationResourceFn func(ctx context.Context, deleteReq *application.ApplicationResourceDeleteRequest) error
