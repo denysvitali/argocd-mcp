@@ -63,8 +63,14 @@ func ResultList(items interface{}, total int, err error) (*mcp.CallToolResult, e
 	}
 
 	// Truncate items to prevent context explosion
-	itemsList := items.([]interface{})
-	itemsList = truncateResponse(itemsList).([]interface{})
+	itemsList, ok := items.([]interface{})
+	if !ok {
+		return errorResult("invalid items type: expected []interface{}"), nil
+	}
+	truncated := truncateResponse(itemsList)
+	if truncatedList, ok := truncated.([]interface{}); ok {
+		itemsList = truncatedList
+	}
 
 	response := listResponse{
 		Items: itemsList,

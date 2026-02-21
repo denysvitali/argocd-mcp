@@ -30,14 +30,14 @@ const (
 
 // ToolManager manages the MCP tools for ArgoCD
 type ToolManager struct {
-	client   *client.Client
+	client   ArgoClient
 	logger   *logrus.Logger
 	tools    []mcp.Tool
 	safeMode bool
 }
 
 // NewToolManager creates a new tool manager
-func NewToolManager(client *client.Client, logger *logrus.Logger, safeMode bool) *ToolManager {
+func NewToolManager(client ArgoClient, logger *logrus.Logger, safeMode bool) *ToolManager {
 	return &ToolManager{
 		client:   client,
 		logger:   logger,
@@ -1137,8 +1137,8 @@ func (tm *ToolManager) handleSyncApplication(ctx context.Context, arguments map[
 
 	return Result(map[string]interface{}{
 		"message":  fmt.Sprintf("Application %s sync initiated", name),
-		"status":   app.Status.Sync.Status,
-		"health":   app.Status.Health.Status,
+		"status":   string(app.Status.Sync.Status),
+		"health":   string(app.Status.Health.Status),
 		"revision": app.Status.Sync.Revision,
 	}, nil)
 }
@@ -1537,8 +1537,8 @@ func (tm *ToolManager) handleRollbackApplication(ctx context.Context, arguments 
 
 	return Result(map[string]interface{}{
 		"message":  fmt.Sprintf("Application %s rolled back", name),
-		"status":   app.Status.Sync.Status,
-		"health":   app.Status.Health.Status,
+		"status":   string(app.Status.Sync.Status),
+		"health":   string(app.Status.Health.Status),
 		"revision": app.Status.Sync.Revision,
 	}, nil)
 }
@@ -2478,9 +2478,21 @@ func formatApplicationSummary(app *v1alpha1.Application) map[string]interface{} 
 		}
 	}
 
+	// Safely extract health status
+	var healthStatus healthlib.HealthStatusCode
+	if app.Status.Health.Status != "" {
+		healthStatus = app.Status.Health.Status
+	}
+
+	// Safely extract sync status
+	var syncStatus v1alpha1.SyncStatusCode
+	if app.Status.Sync.Status != "" {
+		syncStatus = app.Status.Sync.Status
+	}
+
 	// Determine if there are any issues
 	hasIssues := outOfSyncCount > 0 ||
-		app.Status.Health.Status != healthlib.HealthStatusHealthy ||
+		healthStatus != healthlib.HealthStatusHealthy ||
 		(app.Status.OperationState != nil &&
 			(app.Status.OperationState.Phase == synccommon.OperationFailed ||
 				app.Status.OperationState.Phase == synccommon.OperationError))
@@ -2490,17 +2502,35 @@ func formatApplicationSummary(app *v1alpha1.Application) map[string]interface{} 
 		"project":           app.Spec.Project,
 		"server":            app.Spec.Destination.Server,
 		"namespace":         app.Spec.Destination.Namespace,
-		"status":            app.Status.Sync.Status,
-		"health":            app.Status.Health.Status,
+		"status":            syncStatus,
+		"health":            healthStatus,
 		"out_of_sync_count": outOfSyncCount,
 		"has_issues":        hasIssues,
 	}
 }
 
 func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
+	// Safely extract health info
+	var healthStatus healthlib.HealthStatusCode
+	var healthMessage string
+	healthStatus = app.Status.Health.Status
 	// Health.Message is deprecated but we still use it for backward compatibility
 	//lint:ignore SA1019 Health.Message is deprecated
-	healthMessage := app.Status.Health.Message
+	healthMessage = app.Status.Health.Message
+
+	// Safely extract sync info
+	var syncStatus v1alpha1.SyncStatusCode
+	var syncRevision string
+	syncStatus = app.Status.Sync.Status
+	syncRevision = app.Status.Sync.Revision
+
+	// Safely extract source info
+	var repoURL, path, targetRevision string
+	if app.Spec.Source != nil {
+		repoURL = app.Spec.Source.RepoURL
+		path = app.Spec.Source.Path
+		targetRevision = app.Spec.Source.TargetRevision
+	}
 
 	// Count out-of-sync resources
 	outOfSyncCount := 0
@@ -2512,7 +2542,7 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 
 	// Determine if there are any issues
 	hasIssues := outOfSyncCount > 0 ||
-		app.Status.Health.Status != healthlib.HealthStatusHealthy ||
+		healthStatus != healthlib.HealthStatusHealthy ||
 		(app.Status.OperationState != nil &&
 			(app.Status.OperationState.Phase == synccommon.OperationFailed ||
 				app.Status.OperationState.Phase == synccommon.OperationError))
@@ -2537,9 +2567,9 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 	// Format resources with sync status
 	resources := make([]map[string]interface{}, 0, len(app.Status.Resources))
 	for _, r := range app.Status.Resources {
-		healthStatus := ""
+		resHealthStatus := ""
 		if r.Health != nil {
-			healthStatus = string(r.Health.Status)
+			resHealthStatus = string(r.Health.Status)
 		}
 		resources = append(resources, map[string]interface{}{
 			"group":     r.Group,
@@ -2547,22 +2577,22 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 			"namespace": r.Namespace,
 			"name":      r.Name,
 			"status":    r.Status,
-			"health":    healthStatus,
+			"health":    resHealthStatus,
 		})
 	}
 
 	return map[string]interface{}{
 		"name":              app.Name,
 		"project":           app.Spec.Project,
-		"repo_url":          app.Spec.Source.RepoURL,
-		"path":              app.Spec.Source.Path,
-		"target_revision":   app.Spec.Source.TargetRevision,
+		"repo_url":          repoURL,
+		"path":              path,
+		"target_revision":   targetRevision,
 		"server":            app.Spec.Destination.Server,
 		"namespace":         app.Spec.Destination.Namespace,
-		"status":            app.Status.Sync.Status,
-		"health":            app.Status.Health.Status,
+		"status":            syncStatus,
+		"health":            healthStatus,
 		"health_message":    healthMessage,
-		"revision":          app.Status.Sync.Revision,
+		"revision":          syncRevision,
 		"out_of_sync_count": outOfSyncCount,
 		"has_issues":        hasIssues,
 		"operation_phase":   operationPhase,
