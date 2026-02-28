@@ -9,6 +9,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/emptypb"
+	yaml "sigs.k8s.io/yaml"
 )
 
 // Response limits to prevent context explosion
@@ -27,7 +28,7 @@ const (
 	MaxResponseSizeChars = 50000
 )
 
-// Result returns a JSON-formatted result
+// Result returns a YAML-formatted result
 func Result(data interface{}, err error) (*mcp.CallToolResult, error) {
 	if err != nil {
 		return errorResult(err.Error()), nil
@@ -36,7 +37,7 @@ func Result(data interface{}, err error) (*mcp.CallToolResult, error) {
 	// Truncate data to prevent context explosion
 	data = truncateResponse(data)
 
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	yamlData, err := yaml.Marshal(data)
 	if err != nil {
 		return errorResult(fmt.Sprintf("Failed to format response: %v", err)), nil
 	}
@@ -45,13 +46,13 @@ func Result(data interface{}, err error) (*mcp.CallToolResult, error) {
 		Content: []mcp.Content{
 			mcp.TextContent{
 				Type: "text",
-				Text: string(jsonData),
+				Text: string(yamlData),
 			},
 		},
 	}, nil
 }
 
-// ResultList returns a JSON-formatted result for lists
+// ResultList returns a YAML-formatted result for lists
 func ResultList(items interface{}, total int, err error) (*mcp.CallToolResult, error) {
 	if err != nil {
 		return errorResult(err.Error()), nil
@@ -77,7 +78,7 @@ func ResultList(items interface{}, total int, err error) (*mcp.CallToolResult, e
 		Total: total,
 	}
 
-	jsonData, err := json.MarshalIndent(response, "", "  ")
+	yamlData, err := yaml.Marshal(response)
 	if err != nil {
 		return errorResult(fmt.Sprintf("Failed to format response: %v", err)), nil
 	}
@@ -86,7 +87,19 @@ func ResultList(items interface{}, total int, err error) (*mcp.CallToolResult, e
 		Content: []mcp.Content{
 			mcp.TextContent{
 				Type: "text",
-				Text: string(jsonData),
+				Text: string(yamlData),
+			},
+		},
+	}, nil
+}
+
+// TextResult returns a plain text result
+func TextResult(text string) (*mcp.CallToolResult, error) {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.TextContent{
+				Type: "text",
+				Text: text,
 			},
 		},
 	}, nil

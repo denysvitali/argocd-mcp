@@ -294,6 +294,29 @@ func (c *Client) GetManagedResources(ctx context.Context, appName string) ([]*v1
 	return resp.Items, nil
 }
 
+// GetResourceTree returns the resource tree for an application
+func (c *Client) GetResourceTree(ctx context.Context, appName string) (*v1alpha1.ApplicationTree, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appClient, err := c.client.NewApplicationClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create app client: %w", err)
+	}
+	defer closer.Close()
+
+	query := &application.ResourcesQuery{
+		ApplicationName: &appName,
+	}
+
+	tree, err := appClient.ResourceTree(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource tree: %w", err)
+	}
+	return tree, nil
+}
+
 // ListResourceActions lists available actions for a resource
 func (c *Client) ListResourceActions(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error) {
 	if err := c.WaitForRateLimit(ctx); err != nil {

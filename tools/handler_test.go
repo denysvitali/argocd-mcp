@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	yaml "sigs.k8s.io/yaml"
 )
 
 // testToolManager creates a ToolManager with a mock client for testing.
@@ -27,15 +27,23 @@ func testToolManager(mock *MockArgoClient, safeMode bool) *ToolManager {
 	return NewToolManager(mock, logger, safeMode)
 }
 
-// parseResultJSON extracts and parses the JSON from a CallToolResult.
-func parseResultJSON(t *testing.T, result *mcp.CallToolResult) map[string]interface{} {
+// parseResultYAML extracts and parses the YAML from a CallToolResult.
+func parseResultYAML(t *testing.T, result *mcp.CallToolResult) map[string]interface{} {
 	t.Helper()
 	require.NotNil(t, result)
 	require.NotEmpty(t, result.Content)
 	text := result.Content[0].(mcp.TextContent).Text
 	var data map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(text), &data))
+	require.NoError(t, yaml.Unmarshal([]byte(text), &data))
 	return data
+}
+
+// parseResultText extracts plain text from a CallToolResult.
+func parseResultText(t *testing.T, result *mcp.CallToolResult) string {
+	t.Helper()
+	require.NotNil(t, result)
+	require.NotEmpty(t, result.Content)
+	return result.Content[0].(mcp.TextContent).Text
 }
 
 // makeApp creates a test Application with sensible defaults.
@@ -87,7 +95,7 @@ func TestHandleListApplications(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
 
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		items := data["items"].([]interface{})
 		assert.Len(t, items, 2)
 		assert.Equal(t, float64(2), data["total"])
@@ -108,7 +116,7 @@ func TestHandleListApplications(t *testing.T) {
 			"limit": float64(3),
 		})
 		require.NoError(t, err)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		items := data["items"].([]interface{})
 		assert.Len(t, items, 3)
 		assert.Equal(t, float64(10), data["total"])
@@ -136,7 +144,7 @@ func TestHandleListApplications(t *testing.T) {
 		result, err := tm.CallTool(context.Background(), "list_applications", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, float64(0), data["total"])
 	})
 
@@ -168,7 +176,7 @@ func TestHandleGetApplication(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, "myapp", data["name"])
 		assert.Equal(t, "https://github.com/test/repo", data["repo_url"])
 	})
@@ -197,7 +205,7 @@ func TestHandleGetApplication(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, "", data["repo_url"])
 		assert.Equal(t, "", data["path"])
 	})
@@ -258,7 +266,7 @@ func TestHandleCreateApplication(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, "newapp", data["name"])
 	})
 
@@ -307,7 +315,7 @@ func TestHandleDeleteApplication(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, true, data["success"])
 	})
 
@@ -335,7 +343,7 @@ func TestHandleSyncApplication(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Contains(t, data["message"], "sync initiated")
 	})
 
@@ -396,7 +404,7 @@ func TestHandleRollbackApplication(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Contains(t, data["message"], "rolled back")
 	})
 
@@ -490,7 +498,7 @@ func TestHandleGetApplicationManifests(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, float64(2), data["count"])
 		assert.Equal(t, false, data["limited"])
 	})
@@ -540,7 +548,7 @@ func TestHandleGetApplicationDiff(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, float64(1), data["out_of_sync_count"])
 	})
 
@@ -585,7 +593,7 @@ func TestHandleGetApplicationEvents(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, float64(1), data["total"])
 	})
 
@@ -623,7 +631,7 @@ func TestHandleGetApplicationEvents(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, float64(1), data["total"])
 		assert.Equal(t, true, data["filtered"])
 	})
@@ -659,9 +667,10 @@ func TestHandleGetLogs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
-		assert.Equal(t, float64(2), data["total_lines"])
-		assert.Equal(t, false, data["truncated"])
+		text := parseResultText(t, result)
+		assert.Contains(t, text, "myapp logs (2 lines)")
+		assert.Contains(t, text, "line 1")
+		assert.Contains(t, text, "line 2")
 	})
 
 	t.Run("empty logs", func(t *testing.T) {
@@ -711,7 +720,7 @@ func TestHandleListResourceActions(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, float64(2), data["total"])
 	})
 }
@@ -855,7 +864,7 @@ func TestHandleListProjects(t *testing.T) {
 		result, err := tm.CallTool(context.Background(), "list_projects", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, float64(2), data["total"])
 	})
 
@@ -891,7 +900,7 @@ func TestHandleGetProject(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, "myproject", data["name"])
 	})
 }
@@ -1023,7 +1032,7 @@ func TestHandleListRepositories(t *testing.T) {
 		result, err := tm.CallTool(context.Background(), "list_repositories", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, float64(2), data["total"])
 	})
 }
@@ -1045,7 +1054,7 @@ func TestHandleGetRepository(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, "https://github.com/test/repo", data["repo"])
 	})
 }
@@ -1163,7 +1172,7 @@ func TestHandleValidateRepository(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, true, data["valid"])
 	})
 
@@ -1179,7 +1188,7 @@ func TestHandleValidateRepository(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError) // Not an error result, just valid=false
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, false, data["valid"])
 	})
 }
@@ -1204,7 +1213,7 @@ func TestHandleListClusters(t *testing.T) {
 		result, err := tm.CallTool(context.Background(), "list_clusters", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, float64(2), data["total"])
 	})
 }
@@ -1225,7 +1234,7 @@ func TestHandleGetCluster(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
-		data := parseResultJSON(t, result)
+		data := parseResultYAML(t, result)
 		assert.Equal(t, "https://kubernetes.default.svc", data["server"])
 	})
 }
