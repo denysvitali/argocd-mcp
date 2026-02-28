@@ -20,7 +20,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 )
 
 var (
