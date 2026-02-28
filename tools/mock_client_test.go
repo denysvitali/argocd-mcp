@@ -26,6 +26,7 @@ type MockArgoClient struct {
 	GetApplicationEventsFn    func(ctx context.Context, query *application.ApplicationResourceEventsQuery) (interface{}, error)
 	GetApplicationLogsFn      func(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error)
 	GetManagedResourcesFn     func(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
+	GetResourceTreeFn         func(ctx context.Context, appName string) (*v1alpha1.ApplicationTree, error)
 	ListResourceActionsFn     func(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
 	//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
 	RunResourceActionFn         func(ctx context.Context, actionReq *application.ResourceActionRunRequest) error
@@ -68,6 +69,7 @@ type MockArgoClient struct {
 	GetApplicationEventsCalls      []*MockCall
 	GetApplicationLogsCalls        []*MockCall
 	GetManagedResourcesCalls       []*MockCall
+	GetResourceTreeCalls           []*MockCall
 	ListResourceActionsCalls       []*MockCall
 	RunResourceActionCalls         []*MockCall
 	GetApplicationResourceCalls    []*MockCall
@@ -190,6 +192,14 @@ func (m *MockArgoClient) GetManagedResources(ctx context.Context, appName string
 		return m.GetManagedResourcesFn(ctx, appName)
 	}
 	return nil, fmt.Errorf("GetManagedResources not mocked")
+}
+
+func (m *MockArgoClient) GetResourceTree(ctx context.Context, appName string) (*v1alpha1.ApplicationTree, error) {
+	m.GetResourceTreeCalls = append(m.GetResourceTreeCalls, &MockCall{Args: appName})
+	if m.GetResourceTreeFn != nil {
+		return m.GetResourceTreeFn(ctx, appName)
+	}
+	return nil, fmt.Errorf("GetResourceTree not mocked")
 }
 
 func (m *MockArgoClient) ListResourceActions(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error) {

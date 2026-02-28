@@ -26,6 +26,7 @@ type ArgoClient interface {
 	GetApplicationEvents(ctx context.Context, query *application.ApplicationResourceEventsQuery) (interface{}, error)
 	GetApplicationLogs(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error)
 	GetManagedResources(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
+	GetResourceTree(ctx context.Context, appName string) (*v1alpha1.ApplicationTree, error)
 	ListResourceActions(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
 	//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
 	RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error //nolint:staticcheck

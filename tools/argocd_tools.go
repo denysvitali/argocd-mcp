@@ -18,8 +18,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	yaml "sigs.k8s.io/yaml"
 )
 
 // Default timeout and retry constants
@@ -536,6 +536,20 @@ func (tm *ToolManager) defineTools() {
 				Required: []string{"name"},
 			},
 		},
+		{
+			Name:        "get_resource_tree",
+			Description: "Get the resource hierarchy tree for an application, showing parent-child relationships between all Kubernetes resources",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
 		// Project tools
 		{
 			Name:        "list_projects",
@@ -957,6 +971,8 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return tm.handleDeleteApplicationResource(ctx, arguments)
 		case "get_logs":
 			return tm.handleGetLogs(ctx, arguments)
+		case "get_resource_tree":
+			return tm.handleGetResourceTree(ctx, arguments)
 		case "list_projects":
 			return tm.handleListProjects(ctx, arguments)
 		case "get_project":
@@ -1041,10 +1057,31 @@ func (tm *ToolManager) handleGetApplication(ctx context.Context, arguments map[s
 
 	app, err := tm.client.GetApplication(ctx, query)
 	if err != nil {
+		// Fall back to list API which may have broader permissions
+		if strings.Contains(err.Error(), "PermissionDenied") || strings.Contains(err.Error(), "permission denied") {
+			tm.logger.Infof("get_application permission denied for %q, falling back to list", name)
+			return tm.getApplicationFromList(ctx, name)
+		}
 		return errorResult(err.Error()), nil
 	}
 
 	return Result(formatApplicationDetail(app), nil)
+}
+
+func (tm *ToolManager) getApplicationFromList(ctx context.Context, name string) (*mcp.CallToolResult, error) {
+	listQuery := &application.ApplicationQuery{
+		Name: &name,
+	}
+	apps, err := tm.client.ListApplications(ctx, listQuery)
+	if err != nil {
+		return errorResult(fmt.Sprintf("fallback list also failed: %v", err)), nil
+	}
+	for i := range apps.Items {
+		if apps.Items[i].Name == name {
+			return Result(formatApplicationDetail(&apps.Items[i]), nil)
+		}
+	}
+	return errorResult(fmt.Sprintf("application %q not found", name)), nil
 }
 
 func (tm *ToolManager) handleCreateApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -1828,24 +1865,133 @@ func (tm *ToolManager) handleGetLogs(ctx context.Context, arguments map[string]i
 	// Determine truncation status
 	truncated := len(entries) >= client.MaxLogEntries
 
-	// Build response
-	logEntries := make([]interface{}, len(entries))
-	for i, entry := range entries {
-		logEntries[i] = map[string]interface{}{
-			"content":   entry.Content,
-			"timestamp": entry.Timestamp,
-			"pod_name":  entry.PodName,
+	// Build compact plain text output: "timestamp pod_name | content"
+	var sb strings.Builder
+	if truncated {
+		sb.WriteString(fmt.Sprintf("# %s logs (truncated at %d lines)\n", name, len(entries)))
+	} else {
+		sb.WriteString(fmt.Sprintf("# %s logs (%d lines)\n", name, len(entries)))
+	}
+	for _, entry := range entries {
+		if entry.Timestamp != "" && entry.PodName != "" {
+			sb.WriteString(fmt.Sprintf("%s %s | %s\n", entry.Timestamp, entry.PodName, entry.Content))
+		} else if entry.PodName != "" {
+			sb.WriteString(fmt.Sprintf("%s | %s\n", entry.PodName, entry.Content))
+		} else {
+			sb.WriteString(entry.Content)
+			sb.WriteByte('\n')
 		}
 	}
 
-	return Result(map[string]interface{}{
+	return TextResult(sb.String())
+}
+
+// ResourceTreeNode represents a node in the formatted resource hierarchy
+type ResourceTreeNode struct {
+	Kind      string              `json:"kind"`
+	Name      string              `json:"name"`
+	Namespace string              `json:"ns,omitempty"`
+	Health    string              `json:"health,omitempty"`
+	Status    string              `json:"status,omitempty"`
+	Children  []*ResourceTreeNode `json:"children,omitempty"`
+}
+
+func (tm *ToolManager) handleGetResourceTree(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	name := String(arguments, "name", "")
+
+	tree, err := tm.client.GetResourceTree(ctx, name)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	// Build a lookup from UID -> node
+	type nodeInfo struct {
+		node      v1alpha1.ResourceNode
+		children  []string // child UIDs
+		parentUID string
+	}
+	nodesByUID := make(map[string]*nodeInfo)
+	for i := range tree.Nodes {
+		n := tree.Nodes[i]
+		nodesByUID[n.UID] = &nodeInfo{node: n}
+	}
+
+	// Build parent->child relationships
+	roots := make([]string, 0)
+	for uid, info := range nodesByUID {
+		if len(info.node.ParentRefs) == 0 {
+			roots = append(roots, uid)
+		} else {
+			for _, ref := range info.node.ParentRefs {
+				parentUID := ref.UID
+				if parent, ok := nodesByUID[parentUID]; ok {
+					parent.children = append(parent.children, uid)
+					info.parentUID = parentUID
+				} else {
+					// Parent not in tree, treat as root
+					roots = append(roots, uid)
+				}
+			}
+		}
+	}
+
+	// Recursively build tree
+	var buildTree func(uid string) *ResourceTreeNode
+	buildTree = func(uid string) *ResourceTreeNode {
+		info, ok := nodesByUID[uid]
+		if !ok {
+			return nil
+		}
+		n := info.node
+		health := ""
+		if n.Health != nil {
+			health = string(n.Health.Status)
+		}
+		treeNode := &ResourceTreeNode{
+			Kind:      n.Kind,
+			Name:      n.Name,
+			Namespace: n.Namespace,
+			Health:    health,
+		}
+		for _, childUID := range info.children {
+			if child := buildTree(childUID); child != nil {
+				treeNode.Children = append(treeNode.Children, child)
+			}
+		}
+		return treeNode
+	}
+
+	rootNodes := make([]*ResourceTreeNode, 0, len(roots))
+	for _, uid := range roots {
+		if node := buildTree(uid); node != nil {
+			rootNodes = append(rootNodes, node)
+		}
+	}
+
+	// Add orphaned nodes
+	orphanedNodes := make([]*ResourceTreeNode, 0, len(tree.OrphanedNodes))
+	for _, n := range tree.OrphanedNodes {
+		health := ""
+		if n.Health != nil {
+			health = string(n.Health.Status)
+		}
+		orphanedNodes = append(orphanedNodes, &ResourceTreeNode{
+			Kind:      n.Kind,
+			Name:      n.Name,
+			Namespace: n.Namespace,
+			Health:    health,
+		})
+	}
+
+	result := map[string]interface{}{
 		"application": name,
-		"pod_name":    podName,
-		"container":   container,
-		"logs":        logEntries,
-		"total_lines": len(entries),
-		"truncated":   truncated,
-	}, nil)
+		"resources":   rootNodes,
+	}
+	if len(orphanedNodes) > 0 {
+		result["orphaned"] = orphanedNodes
+	}
+
+	return Result(result, nil)
 }
 
 // Project handlers
@@ -2490,14 +2636,33 @@ func formatApplicationSummary(app *v1alpha1.Application) map[string]interface{} 
 		syncStatus = app.Status.Sync.Status
 	}
 
+	// Get operation state info
+	var operationPhase string
+	var operationMessage string
+	if app.Status.OperationState != nil {
+		operationPhase = string(app.Status.OperationState.Phase)
+		operationMessage = app.Status.OperationState.Message
+	}
+
+	// Format conditions
+	conditions := make([]map[string]string, 0, len(app.Status.Conditions))
+	for _, c := range app.Status.Conditions {
+		conditions = append(conditions, map[string]string{
+			"type":    string(c.Type),
+			"message": c.Message,
+		})
+	}
+
 	// Determine if there are any issues
 	hasIssues := outOfSyncCount > 0 ||
 		healthStatus != healthlib.HealthStatusHealthy ||
+		(syncStatus != v1alpha1.SyncStatusCodeSynced && syncStatus != "") ||
 		(app.Status.OperationState != nil &&
 			(app.Status.OperationState.Phase == synccommon.OperationFailed ||
-				app.Status.OperationState.Phase == synccommon.OperationError))
+				app.Status.OperationState.Phase == synccommon.OperationError)) ||
+		len(app.Status.Conditions) > 0
 
-	return map[string]interface{}{
+	result := map[string]interface{}{
 		"name":              app.Name,
 		"project":           app.Spec.Project,
 		"server":            app.Spec.Destination.Server,
@@ -2507,6 +2672,21 @@ func formatApplicationSummary(app *v1alpha1.Application) map[string]interface{} 
 		"out_of_sync_count": outOfSyncCount,
 		"has_issues":        hasIssues,
 	}
+
+	// Include conditions if present
+	if len(conditions) > 0 {
+		result["conditions"] = conditions
+	}
+
+	// Include operation info if present
+	if operationPhase != "" {
+		result["operation_phase"] = operationPhase
+	}
+	if operationMessage != "" {
+		result["operation_message"] = operationMessage
+	}
+
+	return result
 }
 
 func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {

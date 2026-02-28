@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 )
 
 var (
@@ -459,7 +460,12 @@ Examples:
 
 			// Parse arguments
 			var arguments map[string]interface{}
-			if len(args) > 1 {
+			if len(args) > 1 && strings.HasPrefix(args[1], "{") {
+				// JSON argument
+				if err := json.Unmarshal([]byte(args[1]), &arguments); err != nil {
+					return fmt.Errorf("failed to parse JSON argument: %w", err)
+				}
+			} else if len(args) > 1 {
 				// Parse remaining args as key=value pairs
 				arguments = make(map[string]interface{})
 				for _, arg := range args[1:] {
