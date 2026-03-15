@@ -59,12 +59,12 @@ type MockArgoClient struct {
 	DeleteClusterFn func(ctx context.Context, query *cluster.ClusterQuery) error
 
 	// ApplicationSet methods
-	ListApplicationSetsFn          func(ctx context.Context, query *applicationset.ApplicationSetListQuery) (*v1alpha1.ApplicationSetList, error)
-	GetApplicationSetFn            func(ctx context.Context, query *applicationset.ApplicationSetGetQuery) (*v1alpha1.ApplicationSet, error)
+	ListApplicationSetsFn           func(ctx context.Context, query *applicationset.ApplicationSetListQuery) (*v1alpha1.ApplicationSetList, error)
+	GetApplicationSetFn             func(ctx context.Context, query *applicationset.ApplicationSetGetQuery) (*v1alpha1.ApplicationSet, error)
 	GetApplicationSetResourceTreeFn func(ctx context.Context, query *applicationset.ApplicationSetTreeQuery) (*v1alpha1.ApplicationSetTree, error)
-	CreateApplicationSetFn         func(ctx context.Context, req *applicationset.ApplicationSetCreateRequest) (*v1alpha1.ApplicationSet, error)
-	DeleteApplicationSetFn         func(ctx context.Context, req *applicationset.ApplicationSetDeleteRequest) error
-	PreviewApplicationSetFn        func(ctx context.Context, appSet *v1alpha1.ApplicationSet) ([]*v1alpha1.Application, error)
+	CreateApplicationSetFn          func(ctx context.Context, req *applicationset.ApplicationSetCreateRequest) (*v1alpha1.ApplicationSet, error)
+	DeleteApplicationSetFn          func(ctx context.Context, req *applicationset.ApplicationSetDeleteRequest) error
+	PreviewApplicationSetFn         func(ctx context.Context, appSet *v1alpha1.ApplicationSet) ([]*v1alpha1.Application, error)
 
 	// Call tracking
 	ListApplicationsCalls          []*MockCall

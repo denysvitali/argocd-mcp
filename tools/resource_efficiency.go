@@ -101,11 +101,11 @@ type ContainerEfficiency struct {
 	MemRequestFormatted string `json:"memory_request" yaml:"memory_request"`
 
 	// Observed actual usage from Kubernetes Metrics API (may be zero if unavailable).
-	CPUUsageMillis     int64  `json:"cpu_usage_millis,omitempty" yaml:"cpu_usage_millis,omitempty"`
-	MemoryUsageBytes   int64  `json:"memory_usage_bytes,omitempty" yaml:"memory_usage_bytes,omitempty"`
-	CPUUsageFormatted  string `json:"cpu_usage,omitempty" yaml:"cpu_usage,omitempty"`
-	MemUsageFormatted  string `json:"memory_usage,omitempty" yaml:"memory_usage,omitempty"`
-	MetricsAvailable   bool   `json:"metrics_available" yaml:"metrics_available"`
+	CPUUsageMillis    int64  `json:"cpu_usage_millis,omitempty" yaml:"cpu_usage_millis,omitempty"`
+	MemoryUsageBytes  int64  `json:"memory_usage_bytes,omitempty" yaml:"memory_usage_bytes,omitempty"`
+	CPUUsageFormatted string `json:"cpu_usage,omitempty" yaml:"cpu_usage,omitempty"`
+	MemUsageFormatted string `json:"memory_usage,omitempty" yaml:"memory_usage,omitempty"`
+	MetricsAvailable  bool   `json:"metrics_available" yaml:"metrics_available"`
 
 	// Efficiency ratios (usage / request). Empty if metrics unavailable.
 	CPUEfficiencyPct float64 `json:"cpu_efficiency_pct,omitempty" yaml:"cpu_efficiency_pct,omitempty"`
@@ -141,18 +141,18 @@ type WorkloadEfficiency struct {
 
 // ResourceEfficiencyReport is the top-level response from analyze_resource_efficiency.
 type ResourceEfficiencyReport struct {
-	ApplicationName string               `json:"application_name" yaml:"application_name"`
-	Namespace       string               `json:"namespace" yaml:"namespace"`
-	MetricsAvailable bool                `json:"metrics_available" yaml:"metrics_available"`
-	Workloads       []WorkloadEfficiency `json:"workloads" yaml:"workloads"`
+	ApplicationName  string               `json:"application_name" yaml:"application_name"`
+	Namespace        string               `json:"namespace" yaml:"namespace"`
+	MetricsAvailable bool                 `json:"metrics_available" yaml:"metrics_available"`
+	Workloads        []WorkloadEfficiency `json:"workloads" yaml:"workloads"`
 
 	// Grand totals across all workloads in the app.
-	TotalWorkloads         int     `json:"total_workloads" yaml:"total_workloads"`
-	OverProvisionedCount   int     `json:"over_provisioned_count" yaml:"over_provisioned_count"`
-	MissingRequestsCount   int     `json:"missing_requests_count" yaml:"missing_requests_count"`
-	TotalMonthlyCPUWaste   float64 `json:"total_monthly_cpu_waste_dollars,omitempty" yaml:"total_monthly_cpu_waste_dollars,omitempty"`
-	TotalMonthlyMemWaste   float64 `json:"total_monthly_mem_waste_dollars,omitempty" yaml:"total_monthly_mem_waste_dollars,omitempty"`
-	TotalMonthlyWaste      float64 `json:"total_monthly_waste_dollars,omitempty" yaml:"total_monthly_waste_dollars,omitempty"`
+	TotalWorkloads       int     `json:"total_workloads" yaml:"total_workloads"`
+	OverProvisionedCount int     `json:"over_provisioned_count" yaml:"over_provisioned_count"`
+	MissingRequestsCount int     `json:"missing_requests_count" yaml:"missing_requests_count"`
+	TotalMonthlyCPUWaste float64 `json:"total_monthly_cpu_waste_dollars,omitempty" yaml:"total_monthly_cpu_waste_dollars,omitempty"`
+	TotalMonthlyMemWaste float64 `json:"total_monthly_mem_waste_dollars,omitempty" yaml:"total_monthly_mem_waste_dollars,omitempty"`
+	TotalMonthlyWaste    float64 `json:"total_monthly_waste_dollars,omitempty" yaml:"total_monthly_waste_dollars,omitempty"`
 
 	// Cost model used for estimates.
 	CostModelCPUPerVCPUHour float64 `json:"cost_model_cpu_per_vcpu_hour" yaml:"cost_model_cpu_per_vcpu_hour"`
@@ -164,8 +164,8 @@ type ResourceEfficiencyReport struct {
 
 // --- Cost model defaults (AWS/GCP/Azure general-purpose on-demand blended average) ---
 const (
-	defaultCPUCostPerVCPUHour = 0.048  // USD per vCPU-hour
-	defaultMemCostPerGBHour   = 0.006  // USD per GB-hour
+	defaultCPUCostPerVCPUHour = 0.048 // USD per vCPU-hour
+	defaultMemCostPerGBHour   = 0.006 // USD per GB-hour
 	hoursPerMonth             = 730.0
 
 	// Headroom factor added on top of observed usage for right-sizing suggestions.
@@ -181,8 +181,8 @@ const (
 // liveWorkload represents the subset of a Deployment/StatefulSet/DaemonSet live manifest
 // that we need for resource analysis.
 type liveWorkload struct {
-	Kind     string          `json:"kind"`
-	Metadata liveMetadata    `json:"metadata"`
+	Kind     string           `json:"kind"`
+	Metadata liveMetadata     `json:"metadata"`
 	Spec     liveWorkloadSpec `json:"spec"`
 }
 
@@ -193,13 +193,13 @@ type liveMetadata struct {
 }
 
 type liveWorkloadSpec struct {
-	Replicas *int32        `json:"replicas"`
-	Template liveTemplate  `json:"template"`
+	Replicas *int32       `json:"replicas"`
+	Template liveTemplate `json:"template"`
 }
 
 type liveTemplate struct {
-	Metadata liveMetadata       `json:"metadata"`
-	Spec     livePodSpec        `json:"spec"`
+	Metadata liveMetadata `json:"metadata"`
+	Spec     livePodSpec  `json:"spec"`
 }
 
 type livePodSpec struct {
@@ -207,8 +207,8 @@ type livePodSpec struct {
 }
 
 type liveContainer struct {
-	Name      string             `json:"name"`
-	Resources liveResourceReqs   `json:"resources"`
+	Name      string           `json:"name"`
+	Resources liveResourceReqs `json:"resources"`
 }
 
 type liveResourceReqs struct {

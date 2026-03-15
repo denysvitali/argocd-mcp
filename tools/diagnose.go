@@ -57,18 +57,18 @@ type RootCauseSignal struct {
 type FailureCategory string
 
 const (
-	FailureCategoryCrashLoop     FailureCategory = "CrashLoopBackOff"
-	FailureCategoryOOMKilled      FailureCategory = "OOMKilled"
-	FailureCategoryImagePull     FailureCategory = "ImagePullBackOff"
-	FailureCategorySyncFailed    FailureCategory = "SyncFailed"
-	FailureCategoryDegraded      FailureCategory = "DegradedDeployment"
-	FailureCategoryQuota         FailureCategory = "QuotaExceeded"
-	FailureCategoryScheduling    FailureCategory = "PodSchedulingFailed"
-	FailureCategoryConfig        FailureCategory = "ConfigError"
-	FailureCategoryNetwork       FailureCategory = "NetworkError"
-	FailureCategoryOutOfSync     FailureCategory = "OutOfSync"
-	FailureCategoryHealthy       FailureCategory = "Healthy"
-	FailureCategoryUnknown       FailureCategory = "Unknown"
+	FailureCategoryCrashLoop  FailureCategory = "CrashLoopBackOff"
+	FailureCategoryOOMKilled  FailureCategory = "OOMKilled"
+	FailureCategoryImagePull  FailureCategory = "ImagePullBackOff"
+	FailureCategorySyncFailed FailureCategory = "SyncFailed"
+	FailureCategoryDegraded   FailureCategory = "DegradedDeployment"
+	FailureCategoryQuota      FailureCategory = "QuotaExceeded"
+	FailureCategoryScheduling FailureCategory = "PodSchedulingFailed"
+	FailureCategoryConfig     FailureCategory = "ConfigError"
+	FailureCategoryNetwork    FailureCategory = "NetworkError"
+	FailureCategoryOutOfSync  FailureCategory = "OutOfSync"
+	FailureCategoryHealthy    FailureCategory = "Healthy"
+	FailureCategoryUnknown    FailureCategory = "Unknown"
 )
 
 // DiagnosticReport is the top-level response from diagnose_application.
@@ -121,16 +121,16 @@ type DiagnosticReport struct {
 
 // appSnapshot holds all raw data fetched concurrently for a single application.
 type appSnapshot struct {
-	app      *v1alpha1.Application
-	appErr   error
-	managed  []*v1alpha1.ResourceDiff
-	mgrErr   error
-	tree     *v1alpha1.ApplicationTree
-	treeErr  error
-	events   []parsedEvent
-	evtErr   error
-	logs     string // current container log snippets from unhealthy pods
-	logsErr  error
+	app     *v1alpha1.Application
+	appErr  error
+	managed []*v1alpha1.ResourceDiff
+	mgrErr  error
+	tree    *v1alpha1.ApplicationTree
+	treeErr error
+	events  []parsedEvent
+	evtErr  error
+	logs    string // current container log snippets from unhealthy pods
+	logsErr error
 	// previousLogs contains logs from previously-terminated (crashed) containers.
 	// This is the most valuable signal for CrashLoopBackOff and OOMKilled diagnosis.
 	previousLogs string
@@ -138,11 +138,11 @@ type appSnapshot struct {
 
 // parsedEvent is a cleaned-up Kubernetes event extracted from the raw API response.
 type parsedEvent struct {
-	Type           string
-	Reason         string
-	Message        string
-	ResourceKind   string
-	ResourceName   string
+	Type         string
+	Reason       string
+	Message      string
+	ResourceKind string
+	ResourceName string
 }
 
 // --- Handler ---
@@ -256,13 +256,13 @@ func (tm *ToolManager) fetchUnhealthyPodLogs(ctx context.Context, appName string
 		previousFlag := previous
 
 		q := &application.ApplicationPodLogsQuery{
-			Name:         &appName,
-			PodName:      &podName,
-			Namespace:    &ns,
-			Kind:         &kind,
-			Group:        &groupStr,
-			TailLines:    &tailLines,
-			Previous:     &previousFlag,
+			Name:      &appName,
+			PodName:   &podName,
+			Namespace: &ns,
+			Kind:      &kind,
+			Group:     &groupStr,
+			TailLines: &tailLines,
+			Previous:  &previousFlag,
 		}
 		if !previous {
 			q.SinceSeconds = &sinceSeconds
@@ -766,9 +766,9 @@ func extractWarningEvents(raw interface{}) ([]parsedEvent, error) {
 	// The ArgoCD events response wraps items in a "items" array.
 	type rawEventList struct {
 		Items []struct {
-			Type   string `json:"type"`
-			Reason string `json:"reason"`
-			Message string `json:"message"`
+			Type           string `json:"type"`
+			Reason         string `json:"reason"`
+			Message        string `json:"message"`
 			InvolvedObject struct {
 				Kind string `json:"kind"`
 				Name string `json:"name"`

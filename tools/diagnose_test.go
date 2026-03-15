@@ -116,9 +116,13 @@ func TestDiagnoseApplication_MissingName(t *testing.T) {
 func TestDiagnoseApplication_HealthyApp(t *testing.T) {
 	app := makeHealthyApp("my-app")
 	mock := &MockArgoClient{
-		GetApplicationFn:    func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) { return app, nil },
+		GetApplicationFn: func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) {
+			return app, nil
+		},
 		GetManagedResourcesFn: func(_ context.Context, _ string) ([]*v1alpha1.ResourceDiff, error) { return nil, nil },
-		GetResourceTreeFn:   func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) { return &v1alpha1.ApplicationTree{}, nil },
+		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+			return &v1alpha1.ApplicationTree{}, nil
+		},
 		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
 			return emptyEventListJSON(), nil
 		},
@@ -158,9 +162,13 @@ func TestDiagnoseApplication_HealthyApp(t *testing.T) {
 func TestDiagnoseApplication_DegradedApp(t *testing.T) {
 	app := makeDegradedApp("broken-app")
 	mock := &MockArgoClient{
-		GetApplicationFn:    func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) { return app, nil },
+		GetApplicationFn: func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) {
+			return app, nil
+		},
 		GetManagedResourcesFn: func(_ context.Context, _ string) ([]*v1alpha1.ResourceDiff, error) { return nil, nil },
-		GetResourceTreeFn:   func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) { return &v1alpha1.ApplicationTree{}, nil },
+		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+			return &v1alpha1.ApplicationTree{}, nil
+		},
 		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
 			return emptyEventListJSON(), nil
 		},
@@ -207,16 +215,18 @@ func TestDiagnoseApplication_DegradedApp(t *testing.T) {
 func TestDiagnoseApplication_OutOfSyncResources(t *testing.T) {
 	app := makeOutOfSyncApp("drifted-app")
 	outOfSyncResource := &v1alpha1.ResourceDiff{
-		Kind:        "Deployment",
-		Name:        "web",
-		Namespace:   "default",
-		Modified:    true,
-		TargetState: `{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"web"},"spec":{"replicas":3}}`,
+		Kind:                "Deployment",
+		Name:                "web",
+		Namespace:           "default",
+		Modified:            true,
+		TargetState:         `{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"web"},"spec":{"replicas":3}}`,
 		NormalizedLiveState: `{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"web"},"spec":{"replicas":1}}`,
 	}
 
 	mock := &MockArgoClient{
-		GetApplicationFn: func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) { return app, nil },
+		GetApplicationFn: func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) {
+			return app, nil
+		},
 		GetManagedResourcesFn: func(_ context.Context, _ string) ([]*v1alpha1.ResourceDiff, error) {
 			return []*v1alpha1.ResourceDiff{outOfSyncResource}, nil
 		},
@@ -262,9 +272,13 @@ func TestDiagnoseApplication_OutOfSyncResources(t *testing.T) {
 func TestDiagnoseApplication_WarningEvents(t *testing.T) {
 	app := makeHealthyApp("event-app")
 	mock := &MockArgoClient{
-		GetApplicationFn:    func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) { return app, nil },
+		GetApplicationFn: func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) {
+			return app, nil
+		},
 		GetManagedResourcesFn: func(_ context.Context, _ string) ([]*v1alpha1.ResourceDiff, error) { return nil, nil },
-		GetResourceTreeFn:   func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) { return &v1alpha1.ApplicationTree{}, nil },
+		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+			return &v1alpha1.ApplicationTree{}, nil
+		},
 		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
 			return warningEventListJSON("BackOff", "Back-off restarting failed container", "Pod", "web-abc123"), nil
 		},
@@ -299,9 +313,13 @@ func TestDiagnoseApplication_WarningEvents(t *testing.T) {
 func TestDiagnoseApplication_DataSources(t *testing.T) {
 	app := makeHealthyApp("ds-app")
 	mock := &MockArgoClient{
-		GetApplicationFn:    func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) { return app, nil },
+		GetApplicationFn: func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) {
+			return app, nil
+		},
 		GetManagedResourcesFn: func(_ context.Context, _ string) ([]*v1alpha1.ResourceDiff, error) { return nil, nil },
-		GetResourceTreeFn:   func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) { return &v1alpha1.ApplicationTree{}, nil },
+		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+			return &v1alpha1.ApplicationTree{}, nil
+		},
 		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
 			return emptyEventListJSON(), nil
 		},
@@ -336,9 +354,13 @@ func TestDiagnoseApplication_DataSources(t *testing.T) {
 func TestDiagnoseApplication_NextActions(t *testing.T) {
 	app := makeDegradedApp("broken-app")
 	mock := &MockArgoClient{
-		GetApplicationFn:    func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) { return app, nil },
+		GetApplicationFn: func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) {
+			return app, nil
+		},
 		GetManagedResourcesFn: func(_ context.Context, _ string) ([]*v1alpha1.ResourceDiff, error) { return nil, nil },
-		GetResourceTreeFn:   func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) { return &v1alpha1.ApplicationTree{}, nil },
+		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+			return &v1alpha1.ApplicationTree{}, nil
+		},
 		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
 			return emptyEventListJSON(), nil
 		},
@@ -582,7 +604,9 @@ func TestDiagnoseApplication_PreviousLogsSignal(t *testing.T) {
 
 	callCount := 0
 	mock := &MockArgoClient{
-		GetApplicationFn:      func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) { return app, nil },
+		GetApplicationFn: func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) {
+			return app, nil
+		},
 		GetManagedResourcesFn: func(_ context.Context, _ string) ([]*v1alpha1.ResourceDiff, error) { return nil, nil },
 		GetResourceTreeFn:     func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) { return tree, nil },
 		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
@@ -644,9 +668,13 @@ func TestDiagnoseApplication_PreviousLogsSignal(t *testing.T) {
 func TestDiagnoseApplication_CategoryField(t *testing.T) {
 	app := makeHealthyApp("healthy-app")
 	mock := &MockArgoClient{
-		GetApplicationFn:      func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) { return app, nil },
+		GetApplicationFn: func(_ context.Context, _ *application.ApplicationQuery) (*v1alpha1.Application, error) {
+			return app, nil
+		},
 		GetManagedResourcesFn: func(_ context.Context, _ string) ([]*v1alpha1.ResourceDiff, error) { return nil, nil },
-		GetResourceTreeFn:     func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) { return &v1alpha1.ApplicationTree{}, nil },
+		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+			return &v1alpha1.ApplicationTree{}, nil
+		},
 		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
 			return emptyEventListJSON(), nil
 		},

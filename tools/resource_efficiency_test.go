@@ -18,7 +18,7 @@ import (
 // --- Mock metrics client ---
 
 type mockKubeMetricsClient struct {
-	PodMetricsFn  func(ctx context.Context, namespace, labelSelector string) (*metricsv1beta1.PodMetricsList, error)
+	PodMetricsFn    func(ctx context.Context, namespace, labelSelector string) (*metricsv1beta1.PodMetricsList, error)
 	NamespacePodsFn func(ctx context.Context, namespace, labelSelector string) (*corev1.PodList, error)
 }
 

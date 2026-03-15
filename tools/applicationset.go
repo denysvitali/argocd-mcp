@@ -34,14 +34,14 @@ type ApplicationSetConditionSummary struct {
 
 // ApplicationSetDetail is the detailed view of an ApplicationSet.
 type ApplicationSetDetail struct {
-	Name              string                          `json:"name"`
-	Namespace         string                          `json:"namespace,omitempty"`
-	GeneratorTypes    []string                        `json:"generator_types"`
-	ApplicationCount  int64                           `json:"application_count"`
+	Name              string                           `json:"name"`
+	Namespace         string                           `json:"namespace,omitempty"`
+	GeneratorTypes    []string                         `json:"generator_types"`
+	ApplicationCount  int64                            `json:"application_count"`
 	Conditions        []ApplicationSetConditionSummary `json:"conditions,omitempty"`
-	HasErrors         bool                            `json:"has_errors"`
-	Strategy          string                          `json:"strategy,omitempty"`
-	Template          ApplicationSetTemplateSummary   `json:"template"`
+	HasErrors         bool                             `json:"has_errors"`
+	Strategy          string                           `json:"strategy,omitempty"`
+	Template          ApplicationSetTemplateSummary    `json:"template"`
 	ApplicationStatus []ApplicationSetAppStatusSummary `json:"application_status,omitempty"`
 }
 
