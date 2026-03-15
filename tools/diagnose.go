@@ -320,13 +320,13 @@ func buildDiagnosticReport(appName string, snap appSnapshot) DiagnosticReport {
 	// --- Collect root cause signals ---
 	var causes []RootCauseSignal
 
-	// Signal: application health message.
-	if app.Status.Health.Message != "" &&
-		healthStatus != string(healthlib.HealthStatusHealthy) {
+	// Signal: application health status.
+	if healthStatus != string(healthlib.HealthStatusHealthy) &&
+		healthStatus != string(healthlib.HealthStatusProgressing) {
 		causes = append(causes, RootCauseSignal{
 			Source:      "health_check",
 			Signal:      fmt.Sprintf("Application health is %s", healthStatus),
-			Detail:      app.Status.Health.Message,
+			Detail:      fmt.Sprintf("Application %q has health status %s", appName, healthStatus),
 			Remediation: healthRemediationHint(healthStatus, appName),
 			ToolCall:    healthRemediationToolCall(healthStatus, appName),
 		})
@@ -340,7 +340,7 @@ func buildDiagnosticReport(appName string, snap appSnapshot) DiagnosticReport {
 				Source:      "sync_operation",
 				Signal:      fmt.Sprintf("Last sync operation %s: %s", phase, app.Status.OperationState.Message),
 				Detail:      app.Status.OperationState.Message,
-				Remediation: fmt.Sprintf("Investigate sync failure. Check resource-level errors with get_application_diff, then fix the Git source and re-sync."),
+				Remediation: "Investigate sync failure. Check resource-level errors with get_application_diff, then fix the Git source and re-sync.",
 				ToolCall:    yamlToolCall("get_application_diff", map[string]interface{}{"name": appName}),
 			})
 		}
