@@ -30,10 +30,11 @@ const (
 
 // ToolManager manages the MCP tools for ArgoCD
 type ToolManager struct {
-	client   ArgoClient
-	logger   *logrus.Logger
-	tools    []mcp.Tool
-	safeMode bool
+	client      ArgoClient
+	kubeMetrics KubeMetricsClient
+	logger      *logrus.Logger
+	tools       []mcp.Tool
+	safeMode    bool
 }
 
 // NewToolManager creates a new tool manager
@@ -43,6 +44,18 @@ func NewToolManager(client ArgoClient, logger *logrus.Logger, safeMode bool) *To
 		logger:   logger,
 		tools:    []mcp.Tool{},
 		safeMode: safeMode,
+	}
+}
+
+// NewToolManagerWithMetrics creates a new tool manager with an optional Kubernetes metrics client.
+// When kubeMetrics is non-nil, the analyze_resource_efficiency tool will include live usage data.
+func NewToolManagerWithMetrics(client ArgoClient, kubeMetrics KubeMetricsClient, logger *logrus.Logger, safeMode bool) *ToolManager {
+	return &ToolManager{
+		client:      client,
+		kubeMetrics: kubeMetrics,
+		logger:      logger,
+		tools:       []mcp.Tool{},
+		safeMode:    safeMode,
 	}
 }
 
@@ -924,6 +937,33 @@ func (tm *ToolManager) defineTools() {
 				Required: []string{"server"},
 			},
 		},
+		// Cost optimization tools
+		{
+			Name: "analyze_resource_efficiency",
+			Description: "Analyze resource efficiency for an ArgoCD application. " +
+				"Reports declared CPU/memory requests vs actual usage for all Deployments, StatefulSets and DaemonSets. " +
+				"Flags over-provisioned containers, generates right-sizing suggestions with 20% headroom, " +
+				"and estimates monthly cost waste. Requires metrics-server in the cluster for live usage data; " +
+				"without it the tool still reports declared requests and flags missing resource requests.",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+					"cpu_cost_per_vcpu_hour": map[string]interface{}{
+						"type":        "number",
+						"description": "Cost of one vCPU-hour in USD (default: 0.048, a blended AWS/GCP/Azure average)",
+					},
+					"mem_cost_per_gb_hour": map[string]interface{}{
+						"type":        "number",
+						"description": "Cost of one GB-hour of memory in USD (default: 0.006)",
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
 	}
 }
 
@@ -1007,6 +1047,8 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return tm.handleUpdateCluster(ctx, arguments)
 		case "delete_cluster":
 			return tm.handleDeleteCluster(ctx, arguments)
+		case "analyze_resource_efficiency":
+			return tm.handleAnalyzeResourceEfficiency(ctx, arguments)
 		default:
 			return errorResult(fmt.Sprintf("Unknown tool: %s", name)), nil
 		}
