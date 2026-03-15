@@ -937,6 +937,33 @@ func (tm *ToolManager) defineTools() {
 				Required: []string{"server"},
 			},
 		},
+		// Diagnostic tools
+		{
+			Name: "diagnose_application",
+			Description: "Perform a comprehensive incident-response diagnosis for a single ArgoCD application. " +
+				"This compound tool fans out across all relevant data sources in parallel " +
+				"(application status, resource diff, resource tree health, Kubernetes warning events, " +
+				"current pod logs, AND previous/crashed container logs) " +
+				"and fuses the results into a single structured DiagnosticReport containing: " +
+				"a machine-readable failure category (CrashLoopBackOff, OOMKilled, ImagePullBackOff, " +
+				"SyncFailed, DegradedDeployment, QuotaExceeded, PodSchedulingFailed, ConfigError, " +
+				"NetworkError, OutOfSync, Healthy, Unknown), " +
+				"a severity classification (healthy/degraded/critical), identified root-cause signals " +
+				"with evidence snippets and exact MCP tool calls for remediation, a plain-English summary, " +
+				"and a prioritised list of next actions. " +
+				"Use this as the FIRST tool call whenever an application is unhealthy or misbehaving. " +
+				"The previous container logs are especially valuable for diagnosing CrashLoopBackOff and OOMKilled.",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
 		// Cost optimization tools
 		{
 			Name: "analyze_resource_efficiency",
@@ -965,6 +992,9 @@ func (tm *ToolManager) defineTools() {
 			},
 		},
 	}
+
+	// Append ApplicationSet tools defined in applicationset.go
+	tm.tools = append(tm.tools, applicationSetToolDefinitions()...)
 }
 
 // getToolHandler returns the handler for a specific tool
@@ -1049,6 +1079,19 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return tm.handleDeleteCluster(ctx, arguments)
 		case "analyze_resource_efficiency":
 			return tm.handleAnalyzeResourceEfficiency(ctx, arguments)
+		case "diagnose_application":
+			return tm.handleDiagnoseApplication(ctx, arguments)
+		// ApplicationSet handlers
+		case "list_applicationsets":
+			return tm.handleListApplicationSets(ctx, arguments)
+		case "get_applicationset":
+			return tm.handleGetApplicationSet(ctx, arguments)
+		case "preview_applicationset":
+			return tm.handlePreviewApplicationSet(ctx, arguments)
+		case "create_applicationset":
+			return tm.handleCreateApplicationSet(ctx, arguments)
+		case "delete_applicationset":
+			return tm.handleDeleteApplicationSet(ctx, arguments)
 		default:
 			return errorResult(fmt.Sprintf("Unknown tool: %s", name)), nil
 		}

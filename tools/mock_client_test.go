@@ -6,6 +6,7 @@ import (
 
 	"github.com/argocd-mcp/argocd-mcp/internal/client"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
+	"github.com/argoproj/argo-cd/v3/pkg/apiclient/applicationset"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/cluster"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/project"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
@@ -57,6 +58,14 @@ type MockArgoClient struct {
 	UpdateClusterFn func(ctx context.Context, updateReq *cluster.ClusterUpdateRequest) (*v1alpha1.Cluster, error)
 	DeleteClusterFn func(ctx context.Context, query *cluster.ClusterQuery) error
 
+	// ApplicationSet methods
+	ListApplicationSetsFn          func(ctx context.Context, query *applicationset.ApplicationSetListQuery) (*v1alpha1.ApplicationSetList, error)
+	GetApplicationSetFn            func(ctx context.Context, query *applicationset.ApplicationSetGetQuery) (*v1alpha1.ApplicationSet, error)
+	GetApplicationSetResourceTreeFn func(ctx context.Context, query *applicationset.ApplicationSetTreeQuery) (*v1alpha1.ApplicationSetTree, error)
+	CreateApplicationSetFn         func(ctx context.Context, req *applicationset.ApplicationSetCreateRequest) (*v1alpha1.ApplicationSet, error)
+	DeleteApplicationSetFn         func(ctx context.Context, req *applicationset.ApplicationSetDeleteRequest) error
+	PreviewApplicationSetFn        func(ctx context.Context, appSet *v1alpha1.ApplicationSet) ([]*v1alpha1.Application, error)
+
 	// Call tracking
 	ListApplicationsCalls          []*MockCall
 	GetApplicationCalls            []*MockCall
@@ -95,6 +104,13 @@ type MockArgoClient struct {
 	CreateClusterCalls []*MockCall
 	UpdateClusterCalls []*MockCall
 	DeleteClusterCalls []*MockCall
+
+	ListApplicationSetsCalls           []*MockCall
+	GetApplicationSetCalls             []*MockCall
+	GetApplicationSetResourceTreeCalls []*MockCall
+	CreateApplicationSetCalls          []*MockCall
+	DeleteApplicationSetCalls          []*MockCall
+	PreviewApplicationSetCalls         []*MockCall
 }
 
 // MockCall represents a method call with its arguments.
@@ -383,4 +399,54 @@ func (m *MockArgoClient) DeleteCluster(ctx context.Context, query *cluster.Clust
 		return m.DeleteClusterFn(ctx, query)
 	}
 	return fmt.Errorf("DeleteCluster not mocked")
+}
+
+// ApplicationSet methods
+
+func (m *MockArgoClient) ListApplicationSets(ctx context.Context, query *applicationset.ApplicationSetListQuery) (*v1alpha1.ApplicationSetList, error) {
+	m.ListApplicationSetsCalls = append(m.ListApplicationSetsCalls, &MockCall{Args: query})
+	if m.ListApplicationSetsFn != nil {
+		return m.ListApplicationSetsFn(ctx, query)
+	}
+	return nil, fmt.Errorf("ListApplicationSets not mocked")
+}
+
+func (m *MockArgoClient) GetApplicationSet(ctx context.Context, query *applicationset.ApplicationSetGetQuery) (*v1alpha1.ApplicationSet, error) {
+	m.GetApplicationSetCalls = append(m.GetApplicationSetCalls, &MockCall{Args: query})
+	if m.GetApplicationSetFn != nil {
+		return m.GetApplicationSetFn(ctx, query)
+	}
+	return nil, fmt.Errorf("GetApplicationSet not mocked")
+}
+
+func (m *MockArgoClient) GetApplicationSetResourceTree(ctx context.Context, query *applicationset.ApplicationSetTreeQuery) (*v1alpha1.ApplicationSetTree, error) {
+	m.GetApplicationSetResourceTreeCalls = append(m.GetApplicationSetResourceTreeCalls, &MockCall{Args: query})
+	if m.GetApplicationSetResourceTreeFn != nil {
+		return m.GetApplicationSetResourceTreeFn(ctx, query)
+	}
+	return nil, fmt.Errorf("GetApplicationSetResourceTree not mocked")
+}
+
+func (m *MockArgoClient) CreateApplicationSet(ctx context.Context, req *applicationset.ApplicationSetCreateRequest) (*v1alpha1.ApplicationSet, error) {
+	m.CreateApplicationSetCalls = append(m.CreateApplicationSetCalls, &MockCall{Args: req})
+	if m.CreateApplicationSetFn != nil {
+		return m.CreateApplicationSetFn(ctx, req)
+	}
+	return nil, fmt.Errorf("CreateApplicationSet not mocked")
+}
+
+func (m *MockArgoClient) DeleteApplicationSet(ctx context.Context, req *applicationset.ApplicationSetDeleteRequest) error {
+	m.DeleteApplicationSetCalls = append(m.DeleteApplicationSetCalls, &MockCall{Args: req})
+	if m.DeleteApplicationSetFn != nil {
+		return m.DeleteApplicationSetFn(ctx, req)
+	}
+	return fmt.Errorf("DeleteApplicationSet not mocked")
+}
+
+func (m *MockArgoClient) PreviewApplicationSet(ctx context.Context, appSet *v1alpha1.ApplicationSet) ([]*v1alpha1.Application, error) {
+	m.PreviewApplicationSetCalls = append(m.PreviewApplicationSetCalls, &MockCall{Args: appSet})
+	if m.PreviewApplicationSetFn != nil {
+		return m.PreviewApplicationSetFn(ctx, appSet)
+	}
+	return nil, fmt.Errorf("PreviewApplicationSet not mocked")
 }

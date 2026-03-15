@@ -5,6 +5,7 @@ import (
 
 	"github.com/argocd-mcp/argocd-mcp/internal/client"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
+	"github.com/argoproj/argo-cd/v3/pkg/apiclient/applicationset"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/cluster"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/project"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
@@ -56,6 +57,14 @@ type ArgoClient interface {
 	CreateCluster(ctx context.Context, createReq *cluster.ClusterCreateRequest) (*v1alpha1.Cluster, error)
 	UpdateCluster(ctx context.Context, updateReq *cluster.ClusterUpdateRequest) (*v1alpha1.Cluster, error)
 	DeleteCluster(ctx context.Context, query *cluster.ClusterQuery) error
+
+	// ApplicationSet methods
+	ListApplicationSets(ctx context.Context, query *applicationset.ApplicationSetListQuery) (*v1alpha1.ApplicationSetList, error)
+	GetApplicationSet(ctx context.Context, query *applicationset.ApplicationSetGetQuery) (*v1alpha1.ApplicationSet, error)
+	GetApplicationSetResourceTree(ctx context.Context, query *applicationset.ApplicationSetTreeQuery) (*v1alpha1.ApplicationSetTree, error)
+	CreateApplicationSet(ctx context.Context, req *applicationset.ApplicationSetCreateRequest) (*v1alpha1.ApplicationSet, error)
+	DeleteApplicationSet(ctx context.Context, req *applicationset.ApplicationSetDeleteRequest) error
+	PreviewApplicationSet(ctx context.Context, appSet *v1alpha1.ApplicationSet) ([]*v1alpha1.Application, error)
 }
 
 // Compile-time check that *client.Client satisfies ArgoClient

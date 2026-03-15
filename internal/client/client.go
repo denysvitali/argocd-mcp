@@ -10,6 +10,7 @@ import (
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/account"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
+	"github.com/argoproj/argo-cd/v3/pkg/apiclient/applicationset"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/cluster"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/project"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
@@ -720,6 +721,106 @@ func (c *Client) CanI(ctx context.Context, action, scope string) (string, error)
 		return "", fmt.Errorf("failed to check permissions: %w", err)
 	}
 	return resp.Value, nil
+}
+
+// ApplicationSet client methods
+
+// ListApplicationSets returns a list of ApplicationSets
+func (c *Client) ListApplicationSets(ctx context.Context, query *applicationset.ApplicationSetListQuery) (*v1alpha1.ApplicationSetList, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appSetClient, err := c.client.NewApplicationSetClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
+	}
+	defer closer.Close()
+
+	return appSetClient.List(ctx, query)
+}
+
+// GetApplicationSet returns a single ApplicationSet
+func (c *Client) GetApplicationSet(ctx context.Context, query *applicationset.ApplicationSetGetQuery) (*v1alpha1.ApplicationSet, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appSetClient, err := c.client.NewApplicationSetClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
+	}
+	defer closer.Close()
+
+	return appSetClient.Get(ctx, query)
+}
+
+// GetApplicationSetResourceTree returns the resource tree for an ApplicationSet
+func (c *Client) GetApplicationSetResourceTree(ctx context.Context, query *applicationset.ApplicationSetTreeQuery) (*v1alpha1.ApplicationSetTree, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appSetClient, err := c.client.NewApplicationSetClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
+	}
+	defer closer.Close()
+
+	return appSetClient.ResourceTree(ctx, query)
+}
+
+// CreateApplicationSet creates a new ApplicationSet
+func (c *Client) CreateApplicationSet(ctx context.Context, req *applicationset.ApplicationSetCreateRequest) (*v1alpha1.ApplicationSet, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appSetClient, err := c.client.NewApplicationSetClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
+	}
+	defer closer.Close()
+
+	return appSetClient.Create(ctx, req)
+}
+
+// DeleteApplicationSet deletes an ApplicationSet
+func (c *Client) DeleteApplicationSet(ctx context.Context, req *applicationset.ApplicationSetDeleteRequest) error {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appSetClient, err := c.client.NewApplicationSetClient()
+	if err != nil {
+		return fmt.Errorf("failed to create applicationset client: %w", err)
+	}
+	defer closer.Close()
+
+	_, err = appSetClient.Delete(ctx, req)
+	return err
+}
+
+// PreviewApplicationSet calls the Generate API to dry-run an ApplicationSet spec and
+// return the list of Applications it would produce, without creating anything.
+func (c *Client) PreviewApplicationSet(ctx context.Context, appSet *v1alpha1.ApplicationSet) ([]*v1alpha1.Application, error) {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appSetClient, err := c.client.NewApplicationSetClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
+	}
+	defer closer.Close()
+
+	resp, err := appSetClient.Generate(ctx, &applicationset.ApplicationSetGenerateRequest{
+		ApplicationSet: appSet,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate applicationset preview: %w", err)
+	}
+	return resp.GetApplications(), nil
 }
 
 // Server returns the configured server address
