@@ -34,6 +34,7 @@ type ArgoClient interface {
 	GetApplicationResource(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error)
 	PatchApplicationResource(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error)
 	DeleteApplicationResource(ctx context.Context, deleteReq *application.ApplicationResourceDeleteRequest) error
+	TerminateOperation(ctx context.Context, req *application.OperationTerminateRequest) error
 
 	// Project methods
 	ListProjects(ctx context.Context, query *project.ProjectQuery) (*v1alpha1.AppProjectList, error)

@@ -991,6 +991,77 @@ func (tm *ToolManager) defineTools() {
 				Required: []string{"name"},
 			},
 		},
+		// Operations tools
+		{
+			Name:        "terminate_operation",
+			Description: "Terminate the currently running operation (sync, rollback, etc.) on an application. Use this when an operation is stuck and you get 'another operation is already in progress' errors.",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+					"app_namespace": map[string]interface{}{
+						"type":        "string",
+						"description": "Application namespace (optional, for multi-namespace setups)",
+					},
+					"project": map[string]interface{}{
+						"type":        "string",
+						"description": "Project name (optional)",
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
+		{
+			Name:        "restart_pod",
+			Description: "Delete a pod within an ArgoCD application to trigger a restart by its controller (Deployment, StatefulSet, etc.). This is useful when a spec update (e.g. image change) has been synced but running pods haven't picked it up.",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+					"pod_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Name of the pod to restart (required)",
+					},
+					"namespace": map[string]interface{}{
+						"type":        "string",
+						"description": "Pod namespace (required)",
+					},
+				},
+				Required: []string{"name", "pod_name", "namespace"},
+			},
+		},
+		{
+			Name:        "delete_hook",
+			Description: "Delete a hook resource (PreSync, Sync, PostSync, SyncFail, Skip) from an application. Hooks are protected from deletion via the generic delete_application_resource endpoint. Use this tool to remove stuck hooks that block sync operations.",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+					"hook_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Name of the hook resource to delete (required)",
+					},
+					"namespace": map[string]interface{}{
+						"type":        "string",
+						"description": "Hook resource namespace (optional, auto-detected from resource tree if omitted)",
+					},
+					"hook_type": map[string]interface{}{
+						"type":        "string",
+						"description": "Hook phase to match: PreSync, Sync, PostSync, SyncFail, Skip (optional, deletes all matching hooks if omitted)",
+					},
+				},
+				Required: []string{"name", "hook_name"},
+			},
+		},
 	}
 
 	// Append ApplicationSet tools defined in applicationset.go
@@ -1081,6 +1152,12 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return tm.handleAnalyzeResourceEfficiency(ctx, arguments)
 		case "diagnose_application":
 			return tm.handleDiagnoseApplication(ctx, arguments)
+		case "terminate_operation":
+			return tm.handleTerminateOperation(ctx, arguments)
+		case "restart_pod":
+			return tm.handleRestartPod(ctx, arguments)
+		case "delete_hook":
+			return tm.handleDeleteHook(ctx, arguments)
 		// ApplicationSet handlers
 		case "list_applicationsets":
 			return tm.handleListApplicationSets(ctx, arguments)
@@ -2865,6 +2942,219 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 		"conditions":        conditions,
 		"resources":         resources,
 	}
+}
+
+// handleTerminateOperation terminates the currently running operation on an application
+func (tm *ToolManager) handleTerminateOperation(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("terminate_operation"); result != nil {
+		return result, nil
+	}
+
+	name := String(arguments, "name", "")
+	appNamespace := String(arguments, "app_namespace", "")
+	projectName := String(arguments, "project", "")
+
+	req := &application.OperationTerminateRequest{
+		Name: &name,
+	}
+	if appNamespace != "" {
+		req.AppNamespace = &appNamespace
+	}
+	if projectName != "" {
+		req.Project = &projectName
+	}
+
+	err := tm.client.TerminateOperation(ctx, req)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	type terminateResult struct {
+		Message string `json:"message"`
+		Success bool   `json:"success"`
+	}
+
+	return Result(terminateResult{
+		Message: fmt.Sprintf("Operation on application %s terminated successfully", name),
+		Success: true,
+	}, nil)
+}
+
+// handleRestartPod deletes a pod within an application to trigger a controller restart
+func (tm *ToolManager) handleRestartPod(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("restart_pod"); result != nil {
+		return result, nil
+	}
+
+	appName := String(arguments, "name", "")
+	podName := String(arguments, "pod_name", "")
+	namespace := String(arguments, "namespace", "")
+
+	group := ""
+	kind := "Pod"
+	version := "v1"
+	forceDelete := true
+
+	deleteReq := &application.ApplicationResourceDeleteRequest{
+		Name:         &appName,
+		ResourceName: &podName,
+		Version:      &version,
+		Group:        &group,
+		Kind:         &kind,
+		Namespace:    &namespace,
+		Force:        &forceDelete,
+	}
+
+	err := tm.client.DeleteApplicationResource(ctx, deleteReq)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	type restartResult struct {
+		Message   string `json:"message"`
+		Success   bool   `json:"success"`
+		Pod       string `json:"pod"`
+		Namespace string `json:"namespace"`
+	}
+
+	return Result(restartResult{
+		Message:   fmt.Sprintf("Pod %s deleted successfully — its controller will recreate it", podName),
+		Success:   true,
+		Pod:       podName,
+		Namespace: namespace,
+	}, nil)
+}
+
+// HookInfo holds the details of an ArgoCD hook resource found in the resource tree
+type HookInfo struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Group     string `json:"group"`
+	Kind      string `json:"kind"`
+	HookType  string `json:"hook_type"`
+}
+
+// handleDeleteHook finds and deletes hook resources from an application's resource tree
+func (tm *ToolManager) handleDeleteHook(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("delete_hook"); result != nil {
+		return result, nil
+	}
+
+	appName := String(arguments, "name", "")
+	hookName := String(arguments, "hook_name", "")
+	namespace := String(arguments, "namespace", "")
+	hookType := String(arguments, "hook_type", "")
+
+	// Get the resource tree to find hook resources
+	tree, err := tm.client.GetResourceTree(ctx, appName)
+	if err != nil {
+		return errorResult(fmt.Sprintf("failed to get resource tree: %v", err)), nil
+	}
+
+	// Find matching hooks in the resource tree
+	var hooks []HookInfo
+	for _, node := range tree.Nodes {
+		if node.ResourceRef.Name != hookName {
+			continue
+		}
+		// Check if this node is a hook by looking at its info items
+		nodeHookType := ""
+		for _, info := range node.Info {
+			if info.Name == "Hook" {
+				nodeHookType = info.Value
+				break
+			}
+		}
+		if nodeHookType == "" {
+			continue
+		}
+		// If a specific hook type was requested, filter by it
+		if hookType != "" && nodeHookType != hookType {
+			continue
+		}
+		// If a namespace filter was provided, apply it
+		if namespace != "" && node.ResourceRef.Namespace != namespace {
+			continue
+		}
+		hooks = append(hooks, HookInfo{
+			Name:      node.ResourceRef.Name,
+			Namespace: node.ResourceRef.Namespace,
+			Group:     node.ResourceRef.Group,
+			Kind:      node.ResourceRef.Kind,
+			HookType:  nodeHookType,
+		})
+	}
+
+	if len(hooks) == 0 {
+		filterDesc := fmt.Sprintf("hook_name=%s", hookName)
+		if hookType != "" {
+			filterDesc += fmt.Sprintf(", hook_type=%s", hookType)
+		}
+		if namespace != "" {
+			filterDesc += fmt.Sprintf(", namespace=%s", namespace)
+		}
+		return errorResult(fmt.Sprintf("no hook resources found matching %s in application %s", filterDesc, appName)), nil
+	}
+
+	// Delete each matching hook
+	type hookDeleteResult struct {
+		Hook    string `json:"hook"`
+		Kind    string `json:"kind"`
+		Type    string `json:"type"`
+		Deleted bool   `json:"deleted"`
+		Error   string `json:"error,omitempty"`
+	}
+
+	var results []hookDeleteResult
+	forceDelete := true
+	for _, hook := range hooks {
+		version := inferResourceVersion(hook.Group)
+		deleteReq := &application.ApplicationResourceDeleteRequest{
+			Name:         &appName,
+			ResourceName: &hook.Name,
+			Version:      &version,
+			Group:        &hook.Group,
+			Kind:         &hook.Kind,
+			Namespace:    &hook.Namespace,
+			Force:        &forceDelete,
+		}
+
+		deleteErr := tm.client.DeleteApplicationResource(ctx, deleteReq)
+		r := hookDeleteResult{
+			Hook:    hook.Name,
+			Kind:    hook.Kind,
+			Type:    hook.HookType,
+			Deleted: deleteErr == nil,
+		}
+		if deleteErr != nil {
+			r.Error = deleteErr.Error()
+		}
+		results = append(results, r)
+	}
+
+	type deleteHookResponse struct {
+		Message string             `json:"message"`
+		Deleted int                `json:"deleted"`
+		Failed  int                `json:"failed"`
+		Results []hookDeleteResult `json:"results"`
+	}
+
+	deleted := 0
+	failed := 0
+	for _, r := range results {
+		if r.Deleted {
+			deleted++
+		} else {
+			failed++
+		}
+	}
+
+	return Result(deleteHookResponse{
+		Message: fmt.Sprintf("Processed %d hook(s) for application %s", len(results), appName),
+		Deleted: deleted,
+		Failed:  failed,
+		Results: results,
+	}, nil)
 }
 
 // checkSafeMode returns an error result if safe mode is enabled for write operations

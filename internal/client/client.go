@@ -410,6 +410,25 @@ func (c *Client) DeleteApplicationResource(ctx context.Context, deleteReq *appli
 	return nil
 }
 
+// TerminateOperation terminates the currently running operation on an application
+func (c *Client) TerminateOperation(ctx context.Context, req *application.OperationTerminateRequest) error {
+	if err := c.WaitForRateLimit(ctx); err != nil {
+		return fmt.Errorf("rate limit exceeded: %w", err)
+	}
+
+	closer, appClient, err := c.client.NewApplicationClient()
+	if err != nil {
+		return fmt.Errorf("failed to create app client: %w", err)
+	}
+	defer closer.Close()
+
+	_, err = appClient.TerminateOperation(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to terminate operation: %w", err)
+	}
+	return nil
+}
+
 // Project client methods
 
 // ListProjects returns a list of projects

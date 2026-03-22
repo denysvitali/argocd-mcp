@@ -1614,3 +1614,279 @@ func TestResultList_InvalidType(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 }
+
+// =============================================================================
+// terminate_operation handler tests
+// =============================================================================
+
+func TestHandleTerminateOperation(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		mock := &MockArgoClient{
+			TerminateOperationFn: func(_ context.Context, req *application.OperationTerminateRequest) error {
+				assert.Equal(t, "myapp", *req.Name)
+				return nil
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "terminate_operation", map[string]interface{}{
+			"name": "myapp",
+		})
+		require.NoError(t, err)
+		assert.False(t, result.IsError)
+		data := parseResultYAML(t, result)
+		assert.Contains(t, data["message"], "terminated successfully")
+		assert.Equal(t, true, data["success"])
+	})
+
+	t.Run("with optional params", func(t *testing.T) {
+		mock := &MockArgoClient{
+			TerminateOperationFn: func(_ context.Context, req *application.OperationTerminateRequest) error {
+				assert.Equal(t, "myapp", *req.Name)
+				assert.Equal(t, "argocd", *req.AppNamespace)
+				assert.Equal(t, "default", *req.Project)
+				return nil
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "terminate_operation", map[string]interface{}{
+			"name":          "myapp",
+			"app_namespace": "argocd",
+			"project":       "default",
+		})
+		require.NoError(t, err)
+		assert.False(t, result.IsError)
+	})
+
+	t.Run("api error", func(t *testing.T) {
+		mock := &MockArgoClient{
+			TerminateOperationFn: func(_ context.Context, _ *application.OperationTerminateRequest) error {
+				return fmt.Errorf("no operation running")
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "terminate_operation", map[string]interface{}{
+			"name": "myapp",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+	})
+
+	t.Run("blocked in safe mode", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, true)
+		result, err := tm.CallTool(context.Background(), "terminate_operation", map[string]interface{}{
+			"name": "myapp",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "safe mode")
+	})
+}
+
+// =============================================================================
+// restart_pod handler tests
+// =============================================================================
+
+func TestHandleRestartPod(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		mock := &MockArgoClient{
+			DeleteApplicationResourceFn: func(_ context.Context, req *application.ApplicationResourceDeleteRequest) error {
+				assert.Equal(t, "myapp", *req.Name)
+				assert.Equal(t, "my-pod-xyz", *req.ResourceName)
+				assert.Equal(t, "Pod", *req.Kind)
+				assert.Equal(t, "default", *req.Namespace)
+				assert.Equal(t, "", *req.Group)
+				assert.Equal(t, "v1", *req.Version)
+				assert.True(t, *req.Force)
+				return nil
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "restart_pod", map[string]interface{}{
+			"name":      "myapp",
+			"pod_name":  "my-pod-xyz",
+			"namespace": "default",
+		})
+		require.NoError(t, err)
+		assert.False(t, result.IsError)
+		data := parseResultYAML(t, result)
+		assert.Contains(t, data["message"], "deleted successfully")
+		assert.Equal(t, "my-pod-xyz", data["pod"])
+		assert.Equal(t, "default", data["namespace"])
+	})
+
+	t.Run("api error", func(t *testing.T) {
+		mock := &MockArgoClient{
+			DeleteApplicationResourceFn: func(_ context.Context, _ *application.ApplicationResourceDeleteRequest) error {
+				return fmt.Errorf("pod not found")
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "restart_pod", map[string]interface{}{
+			"name":      "myapp",
+			"pod_name":  "nonexistent-pod",
+			"namespace": "default",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+	})
+
+	t.Run("blocked in safe mode", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, true)
+		result, err := tm.CallTool(context.Background(), "restart_pod", map[string]interface{}{
+			"name":      "myapp",
+			"pod_name":  "my-pod-xyz",
+			"namespace": "default",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "safe mode")
+	})
+}
+
+// =============================================================================
+// delete_hook handler tests
+// =============================================================================
+
+func TestHandleDeleteHook(t *testing.T) {
+	makeTree := func(nodes ...v1alpha1.ResourceNode) *v1alpha1.ApplicationTree {
+		return &v1alpha1.ApplicationTree{Nodes: nodes}
+	}
+
+	hookNode := func(name, namespace, kind, hookType string) v1alpha1.ResourceNode {
+		return v1alpha1.ResourceNode{
+			ResourceRef: v1alpha1.ResourceRef{
+				Name:      name,
+				Namespace: namespace,
+				Kind:      kind,
+				Group:     "batch",
+			},
+			Info: []v1alpha1.InfoItem{
+				{Name: "Hook", Value: hookType},
+			},
+		}
+	}
+
+	t.Run("success single hook", func(t *testing.T) {
+		mock := &MockArgoClient{
+			GetResourceTreeFn: func(_ context.Context, appName string) (*v1alpha1.ApplicationTree, error) {
+				return makeTree(hookNode("post-migrate", "default", "Job", "PostSync")), nil
+			},
+			DeleteApplicationResourceFn: func(_ context.Context, req *application.ApplicationResourceDeleteRequest) error {
+				assert.Equal(t, "myapp", *req.Name)
+				assert.Equal(t, "post-migrate", *req.ResourceName)
+				assert.Equal(t, "Job", *req.Kind)
+				assert.True(t, *req.Force)
+				return nil
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
+			"name":      "myapp",
+			"hook_name": "post-migrate",
+		})
+		require.NoError(t, err)
+		assert.False(t, result.IsError)
+		data := parseResultYAML(t, result)
+		assert.Equal(t, 1, int(data["deleted"].(float64)))
+		assert.Equal(t, 0, int(data["failed"].(float64)))
+	})
+
+	t.Run("filter by hook type", func(t *testing.T) {
+		mock := &MockArgoClient{
+			GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+				return makeTree(
+					hookNode("my-hook", "default", "Job", "PreSync"),
+					hookNode("my-hook", "default", "Job", "PostSync"),
+				), nil
+			},
+			DeleteApplicationResourceFn: func(_ context.Context, req *application.ApplicationResourceDeleteRequest) error {
+				return nil
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
+			"name":      "myapp",
+			"hook_name": "my-hook",
+			"hook_type": "PostSync",
+		})
+		require.NoError(t, err)
+		assert.False(t, result.IsError)
+		data := parseResultYAML(t, result)
+		assert.Equal(t, 1, int(data["deleted"].(float64)))
+	})
+
+	t.Run("no hooks found", func(t *testing.T) {
+		mock := &MockArgoClient{
+			GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+				return makeTree(), nil
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
+			"name":      "myapp",
+			"hook_name": "nonexistent",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "no hook resources found")
+	})
+
+	t.Run("resource tree error", func(t *testing.T) {
+		mock := &MockArgoClient{
+			GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+				return nil, fmt.Errorf("app not found")
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
+			"name":      "myapp",
+			"hook_name": "my-hook",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+	})
+
+	t.Run("partial delete failure", func(t *testing.T) {
+		callCount := 0
+		mock := &MockArgoClient{
+			GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
+				return makeTree(
+					hookNode("my-hook", "default", "Job", "PreSync"),
+					hookNode("my-hook", "staging", "Job", "PostSync"),
+				), nil
+			},
+			DeleteApplicationResourceFn: func(_ context.Context, req *application.ApplicationResourceDeleteRequest) error {
+				callCount++
+				if *req.Namespace == "staging" {
+					return fmt.Errorf("permission denied")
+				}
+				return nil
+			},
+		}
+		tm := testToolManager(mock, false)
+		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
+			"name":      "myapp",
+			"hook_name": "my-hook",
+		})
+		require.NoError(t, err)
+		assert.False(t, result.IsError)
+		data := parseResultYAML(t, result)
+		assert.Equal(t, 1, int(data["deleted"].(float64)))
+		assert.Equal(t, 1, int(data["failed"].(float64)))
+		assert.Equal(t, 2, callCount)
+	})
+
+	t.Run("blocked in safe mode", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, true)
+		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
+			"name":      "myapp",
+			"hook_name": "my-hook",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "safe mode")
+	})
+}

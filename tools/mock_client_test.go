@@ -34,6 +34,7 @@ type MockArgoClient struct {
 	GetApplicationResourceFn    func(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error)
 	PatchApplicationResourceFn  func(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error)
 	DeleteApplicationResourceFn func(ctx context.Context, deleteReq *application.ApplicationResourceDeleteRequest) error
+	TerminateOperationFn        func(ctx context.Context, req *application.OperationTerminateRequest) error
 
 	// Project methods
 	ListProjectsFn     func(ctx context.Context, query *project.ProjectQuery) (*v1alpha1.AppProjectList, error)
@@ -84,6 +85,7 @@ type MockArgoClient struct {
 	GetApplicationResourceCalls    []*MockCall
 	PatchApplicationResourceCalls  []*MockCall
 	DeleteApplicationResourceCalls []*MockCall
+	TerminateOperationCalls        []*MockCall
 
 	ListProjectsCalls     []*MockCall
 	GetProjectCalls       []*MockCall
@@ -257,6 +259,14 @@ func (m *MockArgoClient) DeleteApplicationResource(ctx context.Context, deleteRe
 		return m.DeleteApplicationResourceFn(ctx, deleteReq)
 	}
 	return fmt.Errorf("DeleteApplicationResource not mocked")
+}
+
+func (m *MockArgoClient) TerminateOperation(ctx context.Context, req *application.OperationTerminateRequest) error {
+	m.TerminateOperationCalls = append(m.TerminateOperationCalls, &MockCall{Args: req})
+	if m.TerminateOperationFn != nil {
+		return m.TerminateOperationFn(ctx, req)
+	}
+	return fmt.Errorf("TerminateOperation not mocked")
 }
 
 // Project methods
