@@ -1037,6 +1037,25 @@ func (tm *ToolManager) defineTools() {
 			},
 		},
 		{
+			Name:        "refresh_application",
+			Description: "Force ArgoCD to re-fetch the application manifests from Git and refresh the application state. Use 'hard' refresh to invalidate the manifest cache and re-read from the repository. This is useful when you've pushed new commits and want ArgoCD to pick them up immediately instead of waiting for the polling interval.",
+			InputSchema: mcp.ToolInputSchema{
+				Type: "object",
+				Properties: map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Application name (required)",
+					},
+					"refresh_type": map[string]interface{}{
+						"type":        "string",
+						"description": "Refresh type: 'normal' (check for new commits) or 'hard' (invalidate manifest cache and re-read everything). Default: 'hard'",
+						"enum":        []string{"normal", "hard"},
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
+		{
 			Name:        "delete_hook",
 			Description: "Delete a hook resource (PreSync, Sync, PostSync, SyncFail, Skip) from an application. Hooks are protected from deletion via the generic delete_application_resource endpoint. Use this tool to remove stuck hooks that block sync operations.",
 			InputSchema: mcp.ToolInputSchema{
@@ -1156,6 +1175,8 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return tm.handleTerminateOperation(ctx, arguments)
 		case "restart_pod":
 			return tm.handleRestartPod(ctx, arguments)
+		case "refresh_application":
+			return tm.handleRefreshApplication(ctx, arguments)
 		case "delete_hook":
 			return tm.handleDeleteHook(ctx, arguments)
 		// ApplicationSet handlers
@@ -2942,6 +2963,52 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 		"conditions":        conditions,
 		"resources":         resources,
 	}
+}
+
+// handleRefreshApplication forces ArgoCD to re-fetch manifests from Git
+func (tm *ToolManager) handleRefreshApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	name := String(arguments, "name", "")
+	refreshType := String(arguments, "refresh_type", "hard")
+
+	query := &application.ApplicationQuery{
+		Name:    &name,
+		Refresh: &refreshType,
+	}
+
+	app, err := tm.client.GetApplication(ctx, query)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	type refreshResult struct {
+		Message  string `json:"message"`
+		Success  bool   `json:"success"`
+		Status   string `json:"status"`
+		Health   string `json:"health"`
+		Revision string `json:"revision"`
+	}
+
+	status := "Unknown"
+	health := "Unknown"
+	revision := ""
+
+	if app.Status.Sync.Status != "" {
+		status = string(app.Status.Sync.Status)
+	}
+	if app.Status.Health.Status != "" {
+		health = string(app.Status.Health.Status)
+	}
+	if app.Status.Sync.Revision != "" {
+		revision = app.Status.Sync.Revision
+	}
+
+	return Result(refreshResult{
+		Message:  fmt.Sprintf("Application %s refreshed successfully (type: %s)", name, refreshType),
+		Success:  true,
+		Status:   status,
+		Health:   health,
+		Revision: revision,
+	}, nil)
 }
 
 // handleTerminateOperation terminates the currently running operation on an application
