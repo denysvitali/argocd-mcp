@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
 	"github.com/denysvitali/argocd-mcp/internal/auth"
 	"github.com/denysvitali/argocd-mcp/internal/client"
 	"github.com/denysvitali/argocd-mcp/internal/config"
 	"github.com/denysvitali/argocd-mcp/tools"
-	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"

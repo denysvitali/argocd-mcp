@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/denysvitali/argocd-mcp/internal/client"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/applicationset"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/cluster"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/project"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
+	"github.com/denysvitali/argocd-mcp/internal/client"
 )
 
 // MockArgoClient is a mock implementation of ArgoClient interface for testing.
