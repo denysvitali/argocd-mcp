@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient"
@@ -19,6 +21,9 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // MaxLogEntries is the maximum number of log entries to return
@@ -43,10 +48,13 @@ var (
 
 // Client wraps the ArgoCD API client with additional functionality
 type Client struct {
-	client  apiclient.Client
-	logger  *logrus.Logger
-	server  string
-	limiter *rate.Limiter
+	mu          sync.RWMutex
+	client      apiclient.Client
+	logger      *logrus.Logger
+	server      string
+	limiter     *rate.Limiter
+	refreshFn   func(context.Context) (string, error)
+	clientOpts  apiclient.ClientOptions
 }
 
 // NewClient creates a new ArgoCD client
@@ -85,6 +93,85 @@ func NewClient(logger *logrus.Logger, server, token string, insecure, plaintext 
 	}, nil
 }
 
+// NewClientWithRefresh creates a new ArgoCD client with an optional token refresh function.
+// When refreshFn is non-nil, any Unauthenticated error will trigger a token refresh and a
+// single retry of the failed call.
+func NewClientWithRefresh(logger *logrus.Logger, server, token string, insecure, plaintext bool, certFile string, grpcWeb bool, grpcWebRootPath string, refreshFn func(context.Context) (string, error)) (*Client, error) {
+	c, err := NewClient(logger, server, token, insecure, plaintext, certFile, grpcWeb, grpcWebRootPath)
+	if err != nil {
+		return nil, err
+	}
+	c.refreshFn = refreshFn
+	// Store opts without token; token is injected fresh on each refresh.
+	c.clientOpts = apiclient.ClientOptions{
+		ServerAddr:      server,
+		Insecure:        insecure,
+		PlainText:       plaintext,
+		CertFile:        certFile,
+		GRPCWeb:         grpcWeb,
+		GRPCWebRootPath: grpcWebRootPath,
+	}
+	return c, nil
+}
+
+// isUnauthenticated returns true when err signals an expired/invalid session.
+func isUnauthenticated(err error) bool {
+	if err == nil {
+		return false
+	}
+	if s, ok := grpcstatus.FromError(err); ok && s.Code() == codes.Unauthenticated {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "invalid session") || strings.Contains(msg, "Unauthenticated")
+}
+
+// refreshAndRecreate fetches a new token and rebuilds c.client under the write lock.
+func (c *Client) refreshAndRecreate(ctx context.Context) error {
+	newToken, err := c.refreshFn(ctx)
+	if err != nil {
+		return fmt.Errorf("token refresh failed: %w", err)
+	}
+
+	opts := c.clientOpts
+	opts.AuthToken = newToken
+
+	newArgoCDClient, err := apiclient.NewClient(&opts)
+	if err != nil {
+		return fmt.Errorf("failed to recreate ArgoCD client after refresh: %w", err)
+	}
+
+	c.mu.Lock()
+	c.client = newArgoCDClient
+	c.mu.Unlock()
+
+	c.logger.Debug("ArgoCD client refreshed with new token")
+	return nil
+}
+
+// do executes fn under a read lock. If fn returns an Unauthenticated error and a
+// refreshFn is configured, it refreshes the token then retries fn exactly once.
+func (c *Client) do(ctx context.Context, fn func() error) error {
+	c.mu.RLock()
+	err := fn()
+	c.mu.RUnlock()
+
+	if err == nil || !isUnauthenticated(err) || c.refreshFn == nil {
+		return err
+	}
+
+	c.logger.Debug("Unauthenticated error detected, refreshing token...")
+	if refreshErr := c.refreshAndRecreate(ctx); refreshErr != nil {
+		return refreshErr
+	}
+
+	// Single retry under read lock.
+	c.mu.RLock()
+	err = fn()
+	c.mu.RUnlock()
+	return err
+}
+
 // WaitForRateLimit waits for the rate limiter to allow the next request
 func (c *Client) WaitForRateLimit(ctx context.Context) error {
 	return c.limiter.Wait(ctx)
@@ -97,14 +184,17 @@ func (c *Client) ListApplications(ctx context.Context, query *application.Applic
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	return appClient.List(ctx, query)
+	var result *v1alpha1.ApplicationList
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appClient.List(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // GetApplication returns a single application
@@ -112,14 +202,17 @@ func (c *Client) GetApplication(ctx context.Context, query *application.Applicat
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	return appClient.Get(ctx, query)
+	var result *v1alpha1.Application
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appClient.Get(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // CreateApplication creates a new application
@@ -127,14 +220,17 @@ func (c *Client) CreateApplication(ctx context.Context, createReq *application.A
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	return appClient.Create(ctx, createReq)
+	var result *v1alpha1.Application
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appClient.Create(ctx, createReq)
+		return err
+	})
+	return result, err
 }
 
 // UpdateApplication updates an existing application
@@ -142,14 +238,17 @@ func (c *Client) UpdateApplication(ctx context.Context, updateReq *application.A
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	return appClient.Update(ctx, updateReq)
+	var result *v1alpha1.Application
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appClient.Update(ctx, updateReq)
+		return err
+	})
+	return result, err
 }
 
 // DeleteApplication deletes an application
@@ -157,15 +256,15 @@ func (c *Client) DeleteApplication(ctx context.Context, deleteReq *application.A
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	_, err = appClient.Delete(ctx, deleteReq)
-	return err
+	return c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		_, err = appClient.Delete(ctx, deleteReq)
+		return err
+	})
 }
 
 // SyncApplication triggers a sync for an application
@@ -173,14 +272,17 @@ func (c *Client) SyncApplication(ctx context.Context, syncReq *application.Appli
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	return appClient.Sync(ctx, syncReq)
+	var result *v1alpha1.Application
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appClient.Sync(ctx, syncReq)
+		return err
+	})
+	return result, err
 }
 
 // GetApplicationManifests returns the manifests for an application
@@ -188,18 +290,21 @@ func (c *Client) GetApplicationManifests(ctx context.Context, query *application
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	resp, err := appClient.GetManifests(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get application manifests: %w", err)
-	}
-	return resp.Manifests, nil
+	var result []string
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		resp, err := appClient.GetManifests(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to get application manifests: %w", err)
+		}
+		result = resp.Manifests
+		return nil
+	})
+	return result, err
 }
 
 // RollbackApplication performs a rollback for an application
@@ -207,29 +312,35 @@ func (c *Client) RollbackApplication(ctx context.Context, rollbackReq *applicati
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	return appClient.Rollback(ctx, rollbackReq)
+	var result *v1alpha1.Application
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appClient.Rollback(ctx, rollbackReq)
+		return err
+	})
+	return result, err
 }
 
 // GetApplicationEvents returns events for an application
-func (c *Client) GetApplicationEvents(ctx context.Context, query *application.ApplicationResourceEventsQuery) (interface{}, error) {
+func (c *Client) GetApplicationEvents(ctx context.Context, query *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	return appClient.ListResourceEvents(ctx, query)
+	var result *corev1.EventList
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appClient.ListResourceEvents(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // GetApplicationLogs retrieves logs from a pod or resource in an application
@@ -237,40 +348,40 @@ func (c *Client) GetApplicationLogs(ctx context.Context, query *application.Appl
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	stream, err := appClient.PodLogs(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pod logs: %w", err)
-	}
-
 	var entries []ApplicationLogEntry
-	for {
-		entry, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
 		if err != nil {
-			return nil, fmt.Errorf("error receiving logs: %w", err)
+			return err
+		}
+		defer closer.Close()
+
+		stream, err := appClient.PodLogs(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to get pod logs: %w", err)
 		}
 
-		entries = append(entries, ApplicationLogEntry{
-			Content:   entry.GetContent(),
-			Timestamp: entry.GetTimeStampStr(),
-			PodName:   entry.GetPodName(),
-		})
-
-		// Safety limit to prevent context explosion
-		if len(entries) >= MaxLogEntries {
-			break
+		entries = nil
+		for {
+			entry, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("error receiving logs: %w", err)
+			}
+			entries = append(entries, ApplicationLogEntry{
+				Content:   entry.GetContent(),
+				Timestamp: entry.GetTimeStampStr(),
+				PodName:   entry.GetPodName(),
+			})
+			if len(entries) >= MaxLogEntries {
+				break
+			}
 		}
-	}
-	return entries, nil
+		return nil
+	})
+	return entries, err
 }
 
 // GetManagedResources returns the managed resources for an application with diff information
@@ -278,23 +389,26 @@ func (c *Client) GetManagedResources(ctx context.Context, appName string) ([]*v1
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	var result []*v1alpha1.ResourceDiff
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	appNamePtr := &appName
-	query := &application.ResourcesQuery{
-		ApplicationName: appNamePtr,
-	}
-
-	resp, err := appClient.ManagedResources(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get managed resources: %w", err)
-	}
-	return resp.Items, nil
+		appNamePtr := &appName
+		query := &application.ResourcesQuery{
+			ApplicationName: appNamePtr,
+		}
+		resp, err := appClient.ManagedResources(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to get managed resources: %w", err)
+		}
+		result = resp.Items
+		return nil
+	})
+	return result, err
 }
 
 // GetResourceTree returns the resource tree for an application
@@ -302,22 +416,25 @@ func (c *Client) GetResourceTree(ctx context.Context, appName string) (*v1alpha1
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	var result *v1alpha1.ApplicationTree
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	query := &application.ResourcesQuery{
-		ApplicationName: &appName,
-	}
-
-	tree, err := appClient.ResourceTree(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get resource tree: %w", err)
-	}
-	return tree, nil
+		query := &application.ResourcesQuery{
+			ApplicationName: &appName,
+		}
+		tree, err := appClient.ResourceTree(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to get resource tree: %w", err)
+		}
+		result = tree
+		return nil
+	})
+	return result, err
 }
 
 // ListResourceActions lists available actions for a resource
@@ -325,72 +442,78 @@ func (c *Client) ListResourceActions(ctx context.Context, query *application.App
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	var result []*v1alpha1.ResourceAction
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	resp, err := appClient.ListResourceActions(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list resource actions: %w", err)
-	}
-	return resp.Actions, nil
+		resp, err := appClient.ListResourceActions(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to list resource actions: %w", err)
+		}
+		result = resp.Actions
+		return nil
+	})
+	return result, err
 }
 
 // RunResourceAction runs an action on a resource
-//
-//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
-//lint:ignore SA1019 RunResourceAction is deprecated but required for the API
-func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error {
+func (c *Client) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequestV2) error {
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	return c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	// RunResourceAction is deprecated but we need to use it for backward compatibility
-	//lint:ignore SA1019 RunResourceAction is deprecated but required for resource action execution
-	_, err = appClient.RunResourceAction(ctx, actionReq)
-	if err != nil {
-		return fmt.Errorf("failed to run resource action: %w", err)
-	}
-	return nil
+		_, err = appClient.RunResourceActionV2(ctx, actionReq)
+		if err != nil {
+			return fmt.Errorf("failed to run resource action: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetApplicationResource returns a single application resource
-func (c *Client) GetApplicationResource(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error) {
+func (c *Client) GetApplicationResource(ctx context.Context, query *application.ApplicationResourceRequest) (*application.ApplicationResourceResponse, error) {
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	return appClient.GetResource(ctx, query)
+	var result *application.ApplicationResourceResponse
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appClient.GetResource(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // PatchApplicationResource patches a single application resource
-func (c *Client) PatchApplicationResource(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error) {
+func (c *Client) PatchApplicationResource(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (*application.ApplicationResourceResponse, error) {
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	return appClient.PatchResource(ctx, patchReq)
+	var result *application.ApplicationResourceResponse
+	err := c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appClient.PatchResource(ctx, patchReq)
+		return err
+	})
+	return result, err
 }
 
 // DeleteApplicationResource deletes a single application resource
@@ -398,18 +521,19 @@ func (c *Client) DeleteApplicationResource(ctx context.Context, deleteReq *appli
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	return c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	_, err = appClient.DeleteResource(ctx, deleteReq)
-	if err != nil {
-		return fmt.Errorf("failed to delete application resource: %w", err)
-	}
-	return nil
+		_, err = appClient.DeleteResource(ctx, deleteReq)
+		if err != nil {
+			return fmt.Errorf("failed to delete application resource: %w", err)
+		}
+		return nil
+	})
 }
 
 // TerminateOperation terminates the currently running operation on an application
@@ -417,18 +541,19 @@ func (c *Client) TerminateOperation(ctx context.Context, req *application.Operat
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	return c.do(ctx, func() error {
+		closer, appClient, err := c.client.NewApplicationClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, appClient, err := c.client.NewApplicationClient()
-	if err != nil {
-		return fmt.Errorf("failed to create app client: %w", err)
-	}
-	defer closer.Close()
-
-	_, err = appClient.TerminateOperation(ctx, req)
-	if err != nil {
-		return fmt.Errorf("failed to terminate operation: %w", err)
-	}
-	return nil
+		_, err = appClient.TerminateOperation(ctx, req)
+		if err != nil {
+			return fmt.Errorf("failed to terminate operation: %w", err)
+		}
+		return nil
+	})
 }
 
 // Project client methods
@@ -438,14 +563,17 @@ func (c *Client) ListProjects(ctx context.Context, query *project.ProjectQuery) 
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, projectClient, err := c.client.NewProjectClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create project client: %w", err)
-	}
-	defer closer.Close()
-
-	return projectClient.List(ctx, query)
+	var result *v1alpha1.AppProjectList
+	err := c.do(ctx, func() error {
+		closer, projectClient, err := c.client.NewProjectClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = projectClient.List(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // GetProject returns a single project
@@ -453,14 +581,17 @@ func (c *Client) GetProject(ctx context.Context, query *project.ProjectQuery) (*
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, projectClient, err := c.client.NewProjectClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create project client: %w", err)
-	}
-	defer closer.Close()
-
-	return projectClient.Get(ctx, query)
+	var result *v1alpha1.AppProject
+	err := c.do(ctx, func() error {
+		closer, projectClient, err := c.client.NewProjectClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = projectClient.Get(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // CreateProject creates a new project
@@ -468,14 +599,17 @@ func (c *Client) CreateProject(ctx context.Context, createReq *project.ProjectCr
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, projectClient, err := c.client.NewProjectClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create project client: %w", err)
-	}
-	defer closer.Close()
-
-	return projectClient.Create(ctx, createReq)
+	var result *v1alpha1.AppProject
+	err := c.do(ctx, func() error {
+		closer, projectClient, err := c.client.NewProjectClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = projectClient.Create(ctx, createReq)
+		return err
+	})
+	return result, err
 }
 
 // UpdateProject updates an existing project
@@ -483,14 +617,17 @@ func (c *Client) UpdateProject(ctx context.Context, updateReq *project.ProjectUp
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, projectClient, err := c.client.NewProjectClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create project client: %w", err)
-	}
-	defer closer.Close()
-
-	return projectClient.Update(ctx, updateReq)
+	var result *v1alpha1.AppProject
+	err := c.do(ctx, func() error {
+		closer, projectClient, err := c.client.NewProjectClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = projectClient.Update(ctx, updateReq)
+		return err
+	})
+	return result, err
 }
 
 // DeleteProject deletes a project
@@ -498,33 +635,37 @@ func (c *Client) DeleteProject(ctx context.Context, query *project.ProjectQuery)
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	return c.do(ctx, func() error {
+		closer, projectClient, err := c.client.NewProjectClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, projectClient, err := c.client.NewProjectClient()
-	if err != nil {
-		return fmt.Errorf("failed to create project client: %w", err)
-	}
-	defer closer.Close()
-
-	_, err = projectClient.Delete(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to delete project: %w", err)
-	}
-	return nil
+		_, err = projectClient.Delete(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to delete project: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetProjectEvents returns events for a project
-func (c *Client) GetProjectEvents(ctx context.Context, query *project.ProjectQuery) (interface{}, error) {
+func (c *Client) GetProjectEvents(ctx context.Context, query *project.ProjectQuery) (*corev1.EventList, error) {
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, projectClient, err := c.client.NewProjectClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create project client: %w", err)
-	}
-	defer closer.Close()
-
-	return projectClient.ListEvents(ctx, query)
+	var result *corev1.EventList
+	err := c.do(ctx, func() error {
+		closer, projectClient, err := c.client.NewProjectClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = projectClient.ListEvents(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // Repository client methods
@@ -534,14 +675,17 @@ func (c *Client) ListRepositories(ctx context.Context, query *repository.RepoQue
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, repoClient, err := c.client.NewRepoClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repo client: %w", err)
-	}
-	defer closer.Close()
-
-	return repoClient.List(ctx, query)
+	var result *v1alpha1.RepositoryList
+	err := c.do(ctx, func() error {
+		closer, repoClient, err := c.client.NewRepoClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = repoClient.List(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // GetRepository returns a single repository
@@ -549,14 +693,17 @@ func (c *Client) GetRepository(ctx context.Context, query *repository.RepoQuery)
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, repoClient, err := c.client.NewRepoClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repo client: %w", err)
-	}
-	defer closer.Close()
-
-	return repoClient.Get(ctx, query)
+	var result *v1alpha1.Repository
+	err := c.do(ctx, func() error {
+		closer, repoClient, err := c.client.NewRepoClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = repoClient.Get(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // CreateRepository creates a new repository
@@ -564,14 +711,17 @@ func (c *Client) CreateRepository(ctx context.Context, createReq *repository.Rep
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, repoClient, err := c.client.NewRepoClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repo client: %w", err)
-	}
-	defer closer.Close()
-
-	return repoClient.Create(ctx, createReq)
+	var result *v1alpha1.Repository
+	err := c.do(ctx, func() error {
+		closer, repoClient, err := c.client.NewRepoClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = repoClient.Create(ctx, createReq)
+		return err
+	})
+	return result, err
 }
 
 // UpdateRepository updates an existing repository
@@ -579,14 +729,17 @@ func (c *Client) UpdateRepository(ctx context.Context, updateReq *repository.Rep
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, repoClient, err := c.client.NewRepoClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repo client: %w", err)
-	}
-	defer closer.Close()
-
-	return repoClient.Update(ctx, updateReq)
+	var result *v1alpha1.Repository
+	err := c.do(ctx, func() error {
+		closer, repoClient, err := c.client.NewRepoClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = repoClient.Update(ctx, updateReq)
+		return err
+	})
+	return result, err
 }
 
 // DeleteRepository deletes a repository
@@ -594,18 +747,19 @@ func (c *Client) DeleteRepository(ctx context.Context, query *repository.RepoQue
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	return c.do(ctx, func() error {
+		closer, repoClient, err := c.client.NewRepoClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, repoClient, err := c.client.NewRepoClient()
-	if err != nil {
-		return fmt.Errorf("failed to create repo client: %w", err)
-	}
-	defer closer.Close()
-
-	_, err = repoClient.Delete(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to delete repository: %w", err)
-	}
-	return nil
+		_, err = repoClient.Delete(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to delete repository: %w", err)
+		}
+		return nil
+	})
 }
 
 // ValidateRepositoryAccess validates access to a repository
@@ -613,18 +767,19 @@ func (c *Client) ValidateRepositoryAccess(ctx context.Context, query *repository
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	return c.do(ctx, func() error {
+		closer, repoClient, err := c.client.NewRepoClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, repoClient, err := c.client.NewRepoClient()
-	if err != nil {
-		return fmt.Errorf("failed to create repo client: %w", err)
-	}
-	defer closer.Close()
-
-	_, err = repoClient.ValidateAccess(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to validate repository: %w", err)
-	}
-	return nil
+		_, err = repoClient.ValidateAccess(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to validate repository: %w", err)
+		}
+		return nil
+	})
 }
 
 // Cluster client methods
@@ -634,14 +789,17 @@ func (c *Client) ListClusters(ctx context.Context, query *cluster.ClusterQuery) 
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, clusterClient, err := c.client.NewClusterClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cluster client: %w", err)
-	}
-	defer closer.Close()
-
-	return clusterClient.List(ctx, query)
+	var result *v1alpha1.ClusterList
+	err := c.do(ctx, func() error {
+		closer, clusterClient, err := c.client.NewClusterClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = clusterClient.List(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // GetCluster returns a single cluster
@@ -649,14 +807,17 @@ func (c *Client) GetCluster(ctx context.Context, query *cluster.ClusterQuery) (*
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, clusterClient, err := c.client.NewClusterClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cluster client: %w", err)
-	}
-	defer closer.Close()
-
-	return clusterClient.Get(ctx, query)
+	var result *v1alpha1.Cluster
+	err := c.do(ctx, func() error {
+		closer, clusterClient, err := c.client.NewClusterClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = clusterClient.Get(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // CreateCluster creates a new cluster
@@ -664,14 +825,17 @@ func (c *Client) CreateCluster(ctx context.Context, createReq *cluster.ClusterCr
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, clusterClient, err := c.client.NewClusterClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cluster client: %w", err)
-	}
-	defer closer.Close()
-
-	return clusterClient.Create(ctx, createReq)
+	var result *v1alpha1.Cluster
+	err := c.do(ctx, func() error {
+		closer, clusterClient, err := c.client.NewClusterClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = clusterClient.Create(ctx, createReq)
+		return err
+	})
+	return result, err
 }
 
 // UpdateCluster updates an existing cluster
@@ -679,14 +843,17 @@ func (c *Client) UpdateCluster(ctx context.Context, updateReq *cluster.ClusterUp
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, clusterClient, err := c.client.NewClusterClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cluster client: %w", err)
-	}
-	defer closer.Close()
-
-	return clusterClient.Update(ctx, updateReq)
+	var result *v1alpha1.Cluster
+	err := c.do(ctx, func() error {
+		closer, clusterClient, err := c.client.NewClusterClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = clusterClient.Update(ctx, updateReq)
+		return err
+	})
+	return result, err
 }
 
 // DeleteCluster deletes a cluster
@@ -694,18 +861,19 @@ func (c *Client) DeleteCluster(ctx context.Context, query *cluster.ClusterQuery)
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	return c.do(ctx, func() error {
+		closer, clusterClient, err := c.client.NewClusterClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, clusterClient, err := c.client.NewClusterClient()
-	if err != nil {
-		return fmt.Errorf("failed to create cluster client: %w", err)
-	}
-	defer closer.Close()
-
-	_, err = clusterClient.Delete(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to delete cluster: %w", err)
-	}
-	return nil
+		_, err = clusterClient.Delete(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to delete cluster: %w", err)
+		}
+		return nil
+	})
 }
 
 // Account client methods
@@ -715,14 +883,17 @@ func (c *Client) GetAccount(ctx context.Context, name string) (*account.Account,
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, accountClient, err := c.client.NewAccountClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create account client: %w", err)
-	}
-	defer closer.Close()
-
-	return accountClient.GetAccount(ctx, &account.GetAccountRequest{Name: name})
+	var result *account.Account
+	err := c.do(ctx, func() error {
+		closer, accountClient, err := c.client.NewAccountClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = accountClient.GetAccount(ctx, &account.GetAccountRequest{Name: name})
+		return err
+	})
+	return result, err
 }
 
 // CanI checks if the current user can perform an action
@@ -730,18 +901,21 @@ func (c *Client) CanI(ctx context.Context, action, scope string) (string, error)
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return "", fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, accountClient, err := c.client.NewAccountClient()
-	if err != nil {
-		return "", fmt.Errorf("failed to create account client: %w", err)
-	}
-	defer closer.Close()
-
-	resp, err := accountClient.CanI(ctx, &account.CanIRequest{Action: action, Resource: scope})
-	if err != nil {
-		return "", fmt.Errorf("failed to check permissions: %w", err)
-	}
-	return resp.Value, nil
+	var result string
+	err := c.do(ctx, func() error {
+		closer, accountClient, err := c.client.NewAccountClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		resp, err := accountClient.CanI(ctx, &account.CanIRequest{Action: action, Resource: scope})
+		if err != nil {
+			return fmt.Errorf("failed to check permissions: %w", err)
+		}
+		result = resp.Value
+		return nil
+	})
+	return result, err
 }
 
 // ApplicationSet client methods
@@ -751,14 +925,17 @@ func (c *Client) ListApplicationSets(ctx context.Context, query *applicationset.
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appSetClient, err := c.client.NewApplicationSetClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
-	}
-	defer closer.Close()
-
-	return appSetClient.List(ctx, query)
+	var result *v1alpha1.ApplicationSetList
+	err := c.do(ctx, func() error {
+		closer, appSetClient, err := c.client.NewApplicationSetClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appSetClient.List(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // GetApplicationSet returns a single ApplicationSet
@@ -766,14 +943,17 @@ func (c *Client) GetApplicationSet(ctx context.Context, query *applicationset.Ap
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appSetClient, err := c.client.NewApplicationSetClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
-	}
-	defer closer.Close()
-
-	return appSetClient.Get(ctx, query)
+	var result *v1alpha1.ApplicationSet
+	err := c.do(ctx, func() error {
+		closer, appSetClient, err := c.client.NewApplicationSetClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appSetClient.Get(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // GetApplicationSetResourceTree returns the resource tree for an ApplicationSet
@@ -781,14 +961,17 @@ func (c *Client) GetApplicationSetResourceTree(ctx context.Context, query *appli
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appSetClient, err := c.client.NewApplicationSetClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
-	}
-	defer closer.Close()
-
-	return appSetClient.ResourceTree(ctx, query)
+	var result *v1alpha1.ApplicationSetTree
+	err := c.do(ctx, func() error {
+		closer, appSetClient, err := c.client.NewApplicationSetClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appSetClient.ResourceTree(ctx, query)
+		return err
+	})
+	return result, err
 }
 
 // CreateApplicationSet creates a new ApplicationSet
@@ -796,14 +979,17 @@ func (c *Client) CreateApplicationSet(ctx context.Context, req *applicationset.A
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appSetClient, err := c.client.NewApplicationSetClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
-	}
-	defer closer.Close()
-
-	return appSetClient.Create(ctx, req)
+	var result *v1alpha1.ApplicationSet
+	err := c.do(ctx, func() error {
+		closer, appSetClient, err := c.client.NewApplicationSetClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		result, err = appSetClient.Create(ctx, req)
+		return err
+	})
+	return result, err
 }
 
 // DeleteApplicationSet deletes an ApplicationSet
@@ -811,15 +997,15 @@ func (c *Client) DeleteApplicationSet(ctx context.Context, req *applicationset.A
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return fmt.Errorf("rate limit exceeded: %w", err)
 	}
-
-	closer, appSetClient, err := c.client.NewApplicationSetClient()
-	if err != nil {
-		return fmt.Errorf("failed to create applicationset client: %w", err)
-	}
-	defer closer.Close()
-
-	_, err = appSetClient.Delete(ctx, req)
-	return err
+	return c.do(ctx, func() error {
+		closer, appSetClient, err := c.client.NewApplicationSetClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		_, err = appSetClient.Delete(ctx, req)
+		return err
+	})
 }
 
 // PreviewApplicationSet calls the Generate API to dry-run an ApplicationSet spec and
@@ -828,20 +1014,24 @@ func (c *Client) PreviewApplicationSet(ctx context.Context, appSet *v1alpha1.App
 	if err := c.WaitForRateLimit(ctx); err != nil {
 		return nil, fmt.Errorf("rate limit exceeded: %w", err)
 	}
+	var result []*v1alpha1.Application
+	err := c.do(ctx, func() error {
+		closer, appSetClient, err := c.client.NewApplicationSetClient()
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
 
-	closer, appSetClient, err := c.client.NewApplicationSetClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create applicationset client: %w", err)
-	}
-	defer closer.Close()
-
-	resp, err := appSetClient.Generate(ctx, &applicationset.ApplicationSetGenerateRequest{
-		ApplicationSet: appSet,
+		resp, err := appSetClient.Generate(ctx, &applicationset.ApplicationSetGenerateRequest{
+			ApplicationSet: appSet,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to generate applicationset preview: %w", err)
+		}
+		result = resp.GetApplications()
+		return nil
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate applicationset preview: %w", err)
-	}
-	return resp.GetApplications(), nil
+	return result, err
 }
 
 // Ping checks connectivity and auth against the ArgoCD server.

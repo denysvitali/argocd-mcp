@@ -610,7 +610,7 @@ func healthRemediationToolCall(healthStatus, appName string) string {
 }
 
 // resourceHealthRemediationHint returns a hint specific to an unhealthy Kubernetes resource.
-func resourceHealthRemediationHint(kind, name, appName string) string {
+func resourceHealthRemediationHint(kind, name, _ string) string {
 	switch kind {
 	case "Pod":
 		return fmt.Sprintf("Pod %q is unhealthy. Retrieve its logs with get_logs and events with get_application_events to determine the cause (crash loop, OOM, image pull failure, etc.).", name)
@@ -644,7 +644,7 @@ func resourceHealthToolCall(kind, name, namespace, appName string) string {
 }
 
 // eventRemediationHint maps known Kubernetes event reasons to actionable hints.
-func eventRemediationHint(reason, kind, appName string) string {
+func eventRemediationHint(reason, _, _ string) string {
 	switch reason {
 	case "BackOff", "CrashLoopBackOff":
 		return "Container is crash-looping. Retrieve pod logs (including previous container) to identify the crash cause."
