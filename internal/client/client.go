@@ -48,13 +48,13 @@ var (
 
 // Client wraps the ArgoCD API client with additional functionality
 type Client struct {
-	mu          sync.RWMutex
-	client      apiclient.Client
-	logger      *logrus.Logger
-	server      string
-	limiter     *rate.Limiter
-	refreshFn   func(context.Context) (string, error)
-	clientOpts  apiclient.ClientOptions
+	mu         sync.RWMutex
+	client     apiclient.Client
+	logger     *logrus.Logger
+	server     string
+	limiter    *rate.Limiter
+	refreshFn  func(context.Context) (string, error)
+	clientOpts apiclient.ClientOptions
 }
 
 // NewClient creates a new ArgoCD client

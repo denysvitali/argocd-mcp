@@ -17,20 +17,20 @@ import (
 // MockArgoClient is a mock implementation of ArgoClient interface for testing.
 type MockArgoClient struct {
 	// Application methods
-	ListApplicationsFn        func(ctx context.Context, query *application.ApplicationQuery) (*v1alpha1.ApplicationList, error)
-	GetApplicationFn          func(ctx context.Context, query *application.ApplicationQuery) (*v1alpha1.Application, error)
-	CreateApplicationFn       func(ctx context.Context, createReq *application.ApplicationCreateRequest) (*v1alpha1.Application, error)
-	UpdateApplicationFn       func(ctx context.Context, updateReq *application.ApplicationUpdateRequest) (*v1alpha1.Application, error)
-	DeleteApplicationFn       func(ctx context.Context, deleteReq *application.ApplicationDeleteRequest) error
-	SyncApplicationFn         func(ctx context.Context, syncReq *application.ApplicationSyncRequest) (*v1alpha1.Application, error)
-	GetApplicationManifestsFn func(ctx context.Context, query *application.ApplicationManifestQuery) ([]string, error)
-	RollbackApplicationFn     func(ctx context.Context, rollbackReq *application.ApplicationRollbackRequest) (*v1alpha1.Application, error)
-	GetApplicationEventsFn    func(ctx context.Context, query *application.ApplicationResourceEventsQuery) (*corev1.EventList, error)
-	GetApplicationLogsFn      func(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error)
-	GetManagedResourcesFn     func(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
-	GetResourceTreeFn         func(ctx context.Context, appName string) (*v1alpha1.ApplicationTree, error)
-	ListResourceActionsFn     func(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
-	RunResourceActionFn func(ctx context.Context, actionReq *application.ResourceActionRunRequestV2) error
+	ListApplicationsFn          func(ctx context.Context, query *application.ApplicationQuery) (*v1alpha1.ApplicationList, error)
+	GetApplicationFn            func(ctx context.Context, query *application.ApplicationQuery) (*v1alpha1.Application, error)
+	CreateApplicationFn         func(ctx context.Context, createReq *application.ApplicationCreateRequest) (*v1alpha1.Application, error)
+	UpdateApplicationFn         func(ctx context.Context, updateReq *application.ApplicationUpdateRequest) (*v1alpha1.Application, error)
+	DeleteApplicationFn         func(ctx context.Context, deleteReq *application.ApplicationDeleteRequest) error
+	SyncApplicationFn           func(ctx context.Context, syncReq *application.ApplicationSyncRequest) (*v1alpha1.Application, error)
+	GetApplicationManifestsFn   func(ctx context.Context, query *application.ApplicationManifestQuery) ([]string, error)
+	RollbackApplicationFn       func(ctx context.Context, rollbackReq *application.ApplicationRollbackRequest) (*v1alpha1.Application, error)
+	GetApplicationEventsFn      func(ctx context.Context, query *application.ApplicationResourceEventsQuery) (*corev1.EventList, error)
+	GetApplicationLogsFn        func(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error)
+	GetManagedResourcesFn       func(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
+	GetResourceTreeFn           func(ctx context.Context, appName string) (*v1alpha1.ApplicationTree, error)
+	ListResourceActionsFn       func(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
+	RunResourceActionFn         func(ctx context.Context, actionReq *application.ResourceActionRunRequestV2) error
 	GetApplicationResourceFn    func(ctx context.Context, query *application.ApplicationResourceRequest) (*application.ApplicationResourceResponse, error)
 	PatchApplicationResourceFn  func(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (*application.ApplicationResourceResponse, error)
 	DeleteApplicationResourceFn func(ctx context.Context, deleteReq *application.ApplicationResourceDeleteRequest) error
