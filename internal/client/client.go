@@ -14,7 +14,9 @@ import (
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/cluster"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/project"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
+	"github.com/argoproj/argo-cd/v3/pkg/apiclient/session"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
+	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
 )
@@ -840,6 +842,43 @@ func (c *Client) PreviewApplicationSet(ctx context.Context, appSet *v1alpha1.App
 		return nil, fmt.Errorf("failed to generate applicationset preview: %w", err)
 	}
 	return resp.GetApplications(), nil
+}
+
+// Ping checks connectivity and auth against the ArgoCD server.
+// It logs the server version on success and the authenticated username on auth success.
+// Returns an error only if the version check (no-auth) fails; auth failure is logged as a warning.
+func (c *Client) Ping(ctx context.Context) error {
+	// 1. Version check — no auth required, confirms basic connectivity.
+	verCloser, verClient, err := c.client.NewVersionClient()
+	if err != nil {
+		return fmt.Errorf("failed to create version client: %w", err)
+	}
+	defer verCloser.Close()
+
+	verResp, err := verClient.Version(ctx, &empty.Empty{})
+	if err != nil {
+		return fmt.Errorf("server unreachable: %w", err)
+	}
+	c.logger.WithFields(logrus.Fields{
+		"server":  c.server,
+		"version": verResp.GetVersion(),
+	}).Info("Connected to ArgoCD server")
+
+	// 2. Session check — requires a valid token.
+	sessCloser, sessClient, err := c.client.NewSessionClient()
+	if err != nil {
+		c.logger.Warnf("Auth check skipped: failed to create session client: %v", err)
+		return nil
+	}
+	defer sessCloser.Close()
+
+	userInfo, err := sessClient.GetUserInfo(ctx, &session.GetUserInfoRequest{})
+	if err != nil {
+		c.logger.Warnf("Authentication check failed: %v", err)
+		return nil
+	}
+	c.logger.WithField("username", userInfo.GetUsername()).Info("Authenticated successfully")
+	return nil
 }
 
 // Server returns the configured server address

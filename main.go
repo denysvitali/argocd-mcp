@@ -132,6 +132,13 @@ The server communicates over stdio by default.`,
 				return fmt.Errorf("failed to create client: %w", err)
 			}
 
+			// Ping: verify connectivity and auth before starting MCP loop.
+			pingCtx, pingCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := argoClient.Ping(pingCtx); err != nil {
+				logger.Warnf("Startup connectivity check failed: %v", err)
+			}
+			pingCancel()
+
 			// Create tool manager
 			toolManager := tools.NewToolManager(argoClient, logger, cfg.Server.SafeMode, cfg.Server.AllowDeletes)
 			serverTools := toolManager.GetServerTools()
