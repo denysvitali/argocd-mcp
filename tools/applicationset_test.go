@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/applicationset"
@@ -16,7 +15,13 @@ import (
 func newTestToolManagerForAppSet(mock *MockArgoClient) *ToolManager {
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
-	return NewToolManager(mock, logger, false)
+	return NewToolManager(mock, logger, false, false)
+}
+
+func newTestToolManagerForAppSetWithDeletes(mock *MockArgoClient) *ToolManager {
+	logger := logrus.New()
+	logger.SetLevel(logrus.ErrorLevel)
+	return NewToolManager(mock, logger, false, true)
 }
 
 // --- list_applicationsets ---
@@ -302,7 +307,7 @@ func TestHandleCreateApplicationSet_SafeMode(t *testing.T) {
 	mock := &MockArgoClient{}
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
-	tm := NewToolManager(mock, logger, true) // safe mode on
+	tm := NewToolManager(mock, logger, true, false) // safe mode on
 
 	result, err := tm.CallTool(context.Background(), "create_applicationset", map[string]interface{}{
 		"spec": "metadata:\n  name: x\n",
@@ -310,7 +315,7 @@ func TestHandleCreateApplicationSet_SafeMode(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 	text := parseResultText(t, result)
-	assert.True(t, strings.Contains(text, "safe mode") || strings.Contains(text, "Safe Mode"))
+	assert.Contains(t, text, "read-only mode")
 }
 
 func TestHandleCreateApplicationSet_Success(t *testing.T) {
@@ -384,7 +389,7 @@ func TestHandleDeleteApplicationSet_SafeMode(t *testing.T) {
 	mock := &MockArgoClient{}
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
-	tm := NewToolManager(mock, logger, true)
+	tm := NewToolManager(mock, logger, true, false)
 
 	result, err := tm.CallTool(context.Background(), "delete_applicationset", map[string]interface{}{
 		"name": "my-appset",
@@ -401,7 +406,7 @@ func TestHandleDeleteApplicationSet_Success(t *testing.T) {
 		},
 	}
 
-	tm := newTestToolManagerForAppSet(mock)
+	tm := newTestToolManagerForAppSetWithDeletes(mock)
 	result, err := tm.CallTool(context.Background(), "delete_applicationset", map[string]interface{}{
 		"name": "old-appset",
 	})
@@ -409,6 +414,17 @@ func TestHandleDeleteApplicationSet_Success(t *testing.T) {
 	require.NotNil(t, result)
 	assert.False(t, result.IsError)
 	assert.Contains(t, parseResultText(t, result), "deleted")
+}
+
+func TestHandleDeleteApplicationSet_BlockedWithoutAllowDeletes(t *testing.T) {
+	mock := &MockArgoClient{}
+	tm := newTestToolManagerForAppSet(mock)
+	result, err := tm.CallTool(context.Background(), "delete_applicationset", map[string]interface{}{
+		"name": "my-appset",
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, parseResultText(t, result), "allow-deletes")
 }
 
 func TestHandleDeleteApplicationSet_MissingName(t *testing.T) {
@@ -426,7 +442,7 @@ func TestHandleDeleteApplicationSet_ClientError(t *testing.T) {
 		},
 	}
 
-	tm := newTestToolManagerForAppSet(mock)
+	tm := newTestToolManagerForAppSetWithDeletes(mock)
 	result, err := tm.CallTool(context.Background(), "delete_applicationset", map[string]interface{}{
 		"name": "gone",
 	})
@@ -530,7 +546,7 @@ func TestToolManager_ApplicationSetToolsInList(t *testing.T) {
 	mock := &MockArgoClient{}
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
-	tm := NewToolManager(mock, logger, false)
+	tm := NewToolManager(mock, logger, false, false)
 
 	names := tm.GetToolNames()
 	nameSet := make(map[string]bool, len(names))

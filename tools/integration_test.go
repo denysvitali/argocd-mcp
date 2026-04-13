@@ -115,7 +115,7 @@ func TestReadOnlyToolsIntegration(t *testing.T) {
 	argocdClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile)
 	require.NoError(t, err, "Failed to create ArgoCD client")
 
-	tm := NewToolManager(argocdClient, logger, true)
+	tm := NewToolManager(argocdClient, logger, true, false)
 
 	t.Run("list_applications", func(t *testing.T) {
 		result, err := tm.handleListApplications(ctx, make(map[string]any))

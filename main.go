@@ -83,6 +83,12 @@ The server communicates over stdio by default.`,
 			if grpcWebRootPath, _ := cmd.Flags().GetString("grpc-web-root-path"); grpcWebRootPath != "" {
 				cfg.ArgoCD.GRPCWebRootPath = grpcWebRootPath
 			}
+			if readWrite, _ := cmd.Flags().GetBool("read-write"); readWrite {
+				cfg.Server.SafeMode = false
+			}
+			if allowDeletes, _ := cmd.Flags().GetBool("allow-deletes"); allowDeletes {
+				cfg.Server.AllowDeletes = true
+			}
 
 			// Set log level
 			logLevel, err := logrus.ParseLevel(cfg.Logging.Level)
@@ -91,6 +97,15 @@ The server communicates over stdio by default.`,
 				logLevel = logrus.InfoLevel
 			}
 			logger.SetLevel(logLevel)
+
+			switch {
+			case cfg.Server.SafeMode:
+				logger.Info("Running in read-only mode (all writes disabled). Use --read-write to enable writes.")
+			case cfg.Server.AllowDeletes:
+				logger.Warn("Running in read-write mode with deletes enabled")
+			default:
+				logger.Warn("Running in read-write mode (deletes still disabled). Use --allow-deletes to enable deletes.")
+			}
 
 			logger.WithField("server", cfg.ArgoCD.Server).Info("Connecting to ArgoCD")
 
@@ -118,7 +133,7 @@ The server communicates over stdio by default.`,
 			}
 
 			// Create tool manager
-			toolManager := tools.NewToolManager(argoClient, logger, cfg.Server.SafeMode)
+			toolManager := tools.NewToolManager(argoClient, logger, cfg.Server.SafeMode, cfg.Server.AllowDeletes)
 			serverTools := toolManager.GetServerTools()
 
 			// Create context that cancels on interrupt
@@ -141,9 +156,11 @@ The server communicates over stdio by default.`,
 		},
 	}
 
-	// Add gRPC-Web flags to serveCmd
+	// Add flags to serveCmd
 	serveCmd.Flags().Bool("grpc-web", false, "Enable gRPC-Web mode (use when ArgoCD is behind a reverse proxy that doesn't support native gRPC)")
 	serveCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests (e.g., /argo-cd)")
+	serveCmd.Flags().Bool("read-write", false, "Enable write operations (overrides read-only default and config file)")
+	serveCmd.Flags().Bool("allow-deletes", false, "Enable delete operations (requires --read-write; deletes are always gated separately)")
 
 	// Config init command
 	configCmd := &cobra.Command{
@@ -209,8 +226,9 @@ Or run interactively without flags:
 					GRPCWebRootPath: grpcWebRootPath,
 				},
 				Server: config.ServerConfig{
-					MCPEndpoint: "stdio",
-					SafeMode:    false,
+					MCPEndpoint:  "stdio",
+					SafeMode:     true,
+					AllowDeletes: false,
 				},
 				Logging: config.LoggingConfig{
 					Level:  "info",
@@ -283,6 +301,14 @@ Or run interactively without flags:
 				fmt.Printf("gRPC-Web Root Path: %s\n", cfg.ArgoCD.GRPCWebRootPath)
 			}
 			fmt.Printf("MCP Endpoint: %s\n", cfg.Server.MCPEndpoint)
+			switch {
+			case cfg.Server.SafeMode:
+				fmt.Printf("Mode: read-only (all writes disabled)\n")
+			case cfg.Server.AllowDeletes:
+				fmt.Printf("Mode: read-write + deletes enabled\n")
+			default:
+				fmt.Printf("Mode: read-write (deletes disabled)\n")
+			}
 			if cfg.ArgoCD.Token != "" {
 				fmt.Printf("Token: %s\n", auth.MaskToken(cfg.ArgoCD.Token))
 			}
@@ -572,7 +598,7 @@ Examples:
 				return fmt.Errorf("failed to create client: %w", err)
 			}
 
-			toolManager := tools.NewToolManager(argoClient, logger, cfg.Server.SafeMode)
+			toolManager := tools.NewToolManager(argoClient, logger, cfg.Server.SafeMode, cfg.Server.AllowDeletes)
 
 			if listOnly {
 				// List all available tools
