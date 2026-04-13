@@ -66,12 +66,12 @@ const (
 	toolGetProjectEvent = "get_project_events"
 
 	// Repositories
-	toolListRepositories    = "list_repositories"
-	toolGetRepository       = "get_repository"
-	toolCreateRepository    = "create_repository"
-	toolUpdateRepository    = "update_repository"
-	toolDeleteRepository    = "delete_repository"
-	toolValidateRepository  = "validate_repository"
+	toolListRepositories   = "list_repositories"
+	toolGetRepository      = "get_repository"
+	toolCreateRepository   = "create_repository"
+	toolUpdateRepository   = "update_repository"
+	toolDeleteRepository   = "delete_repository"
+	toolValidateRepository = "validate_repository"
 
 	// Clusters
 	toolListClusters  = "list_clusters"

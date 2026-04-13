@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/argoproj/argo-cd/v3/util/localconfig"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -88,5 +89,49 @@ func LoadConfig(logger *logrus.Logger) (*Config, error) {
 		cfg.ArgoCD.GRPCWebRootPath = grpcWebRootPath
 	}
 
+	// Fallback: read token (and server) from native argocd CLI config (~/.config/argocd/config)
+	if cfg.ArgoCD.Token == "" {
+		if err := applyNativeArgocdConfig(logger, &cfg); err != nil {
+			logger.Debugf("Could not read native argocd config: %v", err)
+		}
+	}
+
 	return &cfg, nil
+}
+
+// applyNativeArgocdConfig reads the native argocd CLI config and applies the
+// token (and optionally server/insecure) to cfg if they are not already set.
+func applyNativeArgocdConfig(logger *logrus.Logger, cfg *Config) error {
+	path, err := localconfig.DefaultLocalConfigPath()
+	if err != nil {
+		return fmt.Errorf("get native argocd config path: %w", err)
+	}
+
+	lc, err := localconfig.ReadLocalConfig(path)
+	if err != nil {
+		return fmt.Errorf("read native argocd config: %w", err)
+	}
+	if lc == nil {
+		return nil
+	}
+
+	ctx, err := lc.ResolveContext(lc.CurrentContext)
+	if err != nil {
+		return fmt.Errorf("resolve argocd context: %w", err)
+	}
+
+	if ctx.User.AuthToken == "" {
+		return nil
+	}
+
+	logger.Debugf("Using token from native argocd config (context: %s)", lc.CurrentContext)
+	cfg.ArgoCD.Token = ctx.User.AuthToken
+
+	if cfg.ArgoCD.Server == "" || cfg.ArgoCD.Server == "localhost:8080" {
+		cfg.ArgoCD.Server = ctx.Server.Server
+		cfg.ArgoCD.Insecure = ctx.Server.Insecure
+		cfg.ArgoCD.GRPCWeb = ctx.Server.GRPCWeb
+	}
+
+	return nil
 }
