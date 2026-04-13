@@ -309,7 +309,7 @@ func (tm *ToolManager) handlePreviewApplicationSet(ctx context.Context, argument
 
 // handleCreateApplicationSet creates a new ApplicationSet from a YAML/JSON spec.
 func (tm *ToolManager) handleCreateApplicationSet(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("create_applicationset"); result != nil {
+	if result := tm.checkSafeMode(toolCreateApplicationSet); result != nil {
 		return result, nil
 	}
 
@@ -345,7 +345,7 @@ func (tm *ToolManager) handleCreateApplicationSet(ctx context.Context, arguments
 
 // handleDeleteApplicationSet deletes an ApplicationSet by name.
 func (tm *ToolManager) handleDeleteApplicationSet(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("delete_applicationset"); result != nil {
+	if result := tm.checkDeleteAllowed(toolDeleteApplicationSet); result != nil {
 		return result, nil
 	}
 

@@ -28,34 +28,101 @@ const (
 	defaultRetryCount  = 3
 )
 
+// Tool name constants
+const (
+	// Applications
+	toolListApplications       = "list_applications"
+	toolGetApplication         = "get_application"
+	toolCreateApplication      = "create_application"
+	toolUpdateApplication      = "update_application"
+	toolDeleteApplication      = "delete_application"
+	toolSyncApplication        = "sync_application"
+	toolRollbackApplication    = "rollback_application"
+	toolRefreshApplication     = "refresh_application"
+	toolGetApplicationManifest = "get_application_manifests"
+	toolGetApplicationDiff     = "get_application_diff"
+	toolGetApplicationEvents   = "get_application_events"
+	toolGetLogs                = "get_logs"
+	toolGetResourceTree        = "get_resource_tree"
+
+	// Application resources
+	toolListResourceActions       = "list_resource_actions"
+	toolGetApplicationResource    = "get_application_resource"
+	toolRunResourceAction         = "run_resource_action"
+	toolPatchApplicationResource  = "patch_application_resource"
+	toolDeleteApplicationResource = "delete_application_resource"
+
+	// Operations
+	toolTerminateOperation = "terminate_operation"
+	toolRestartPod         = "restart_pod"
+	toolDeleteHook         = "delete_hook"
+
+	// Projects
+	toolListProjects    = "list_projects"
+	toolGetProject      = "get_project"
+	toolCreateProject   = "create_project"
+	toolUpdateProject   = "update_project"
+	toolDeleteProject   = "delete_project"
+	toolGetProjectEvent = "get_project_events"
+
+	// Repositories
+	toolListRepositories    = "list_repositories"
+	toolGetRepository       = "get_repository"
+	toolCreateRepository    = "create_repository"
+	toolUpdateRepository    = "update_repository"
+	toolDeleteRepository    = "delete_repository"
+	toolValidateRepository  = "validate_repository"
+
+	// Clusters
+	toolListClusters  = "list_clusters"
+	toolGetCluster    = "get_cluster"
+	toolCreateCluster = "create_cluster"
+	toolUpdateCluster = "update_cluster"
+	toolDeleteCluster = "delete_cluster"
+
+	// ApplicationSets
+	toolListApplicationSets   = "list_applicationsets"
+	toolGetApplicationSet     = "get_applicationset"
+	toolPreviewApplicationSet = "preview_applicationset"
+	toolCreateApplicationSet  = "create_applicationset"
+	toolDeleteApplicationSet  = "delete_applicationset"
+
+	// Diagnostics
+	toolDiagnoseApplication       = "diagnose_application"
+	toolAnalyzeResourceEfficiency = "analyze_resource_efficiency"
+)
+
 // ToolManager manages the MCP tools for ArgoCD
 type ToolManager struct {
-	client      ArgoClient
-	kubeMetrics KubeMetricsClient
-	logger      *logrus.Logger
-	tools       []mcp.Tool
-	safeMode    bool
+	client       ArgoClient
+	kubeMetrics  KubeMetricsClient
+	logger       *logrus.Logger
+	tools        []mcp.Tool
+	safeMode     bool
+	allowDeletes bool
 }
 
 // NewToolManager creates a new tool manager
-func NewToolManager(client ArgoClient, logger *logrus.Logger, safeMode bool) *ToolManager {
+func NewToolManager(client ArgoClient, logger *logrus.Logger, safeMode bool, allowDeletes bool) *ToolManager {
 	return &ToolManager{
-		client:   client,
-		logger:   logger,
-		tools:    []mcp.Tool{},
-		safeMode: safeMode,
+		client:       client,
+		logger:       logger,
+		tools:        []mcp.Tool{},
+		safeMode:     safeMode,
+		allowDeletes: allowDeletes,
 	}
 }
 
 // NewToolManagerWithMetrics creates a new tool manager with an optional Kubernetes metrics client.
 // When kubeMetrics is non-nil, the analyze_resource_efficiency tool will include live usage data.
-func NewToolManagerWithMetrics(client ArgoClient, kubeMetrics KubeMetricsClient, logger *logrus.Logger, safeMode bool) *ToolManager {
+func NewToolManagerWithMetrics(client ArgoClient, kubeMetrics KubeMetricsClient, logger *logrus.Logger, safeMode bool, allowDeletes bool) *ToolManager {
 	return &ToolManager{
-		client:      client,
-		kubeMetrics: kubeMetrics,
-		logger:      logger,
-		tools:       []mcp.Tool{},
-		safeMode:    safeMode,
+		client:       client,
+		kubeMetrics:  kubeMetrics,
+		logger:       logger,
+		tools:        []mcp.Tool{},
+		safeMode:     safeMode,
+		allowDeletes: allowDeletes,
 	}
 }
 
@@ -1099,96 +1166,96 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 		defer cancel()
 
 		switch name {
-		case "list_applications":
+		case toolListApplications:
 			return tm.handleListApplications(ctx, arguments)
-		case "get_application":
+		case toolGetApplication:
 			return tm.handleGetApplication(ctx, arguments)
-		case "create_application":
+		case toolCreateApplication:
 			return tm.handleCreateApplication(ctx, arguments)
-		case "update_application":
+		case toolUpdateApplication:
 			return tm.handleUpdateApplication(ctx, arguments)
-		case "delete_application":
+		case toolDeleteApplication:
 			return tm.handleDeleteApplication(ctx, arguments)
-		case "sync_application":
+		case toolSyncApplication:
 			return tm.handleSyncApplication(ctx, arguments)
-		case "rollback_application":
+		case toolRollbackApplication:
 			return tm.handleRollbackApplication(ctx, arguments)
-		case "get_application_manifests":
+		case toolGetApplicationManifest:
 			return tm.handleGetApplicationManifests(ctx, arguments)
-		case "get_application_diff":
+		case toolGetApplicationDiff:
 			return tm.handleGetApplicationDiff(ctx, arguments)
-		case "get_application_events":
+		case toolGetApplicationEvents:
 			return tm.handleGetApplicationEvents(ctx, arguments)
-		case "list_resource_actions":
+		case toolListResourceActions:
 			return tm.handleListResourceActions(ctx, arguments)
-		case "run_resource_action":
+		case toolRunResourceAction:
 			return tm.handleRunResourceAction(ctx, arguments)
-		case "get_application_resource":
+		case toolGetApplicationResource:
 			return tm.handleGetApplicationResource(ctx, arguments)
-		case "patch_application_resource":
+		case toolPatchApplicationResource:
 			return tm.handlePatchApplicationResource(ctx, arguments)
-		case "delete_application_resource":
+		case toolDeleteApplicationResource:
 			return tm.handleDeleteApplicationResource(ctx, arguments)
-		case "get_logs":
+		case toolGetLogs:
 			return tm.handleGetLogs(ctx, arguments)
-		case "get_resource_tree":
+		case toolGetResourceTree:
 			return tm.handleGetResourceTree(ctx, arguments)
-		case "list_projects":
+		case toolListProjects:
 			return tm.handleListProjects(ctx, arguments)
-		case "get_project":
+		case toolGetProject:
 			return tm.handleGetProject(ctx, arguments)
-		case "create_project":
+		case toolCreateProject:
 			return tm.handleCreateProject(ctx, arguments)
-		case "update_project":
+		case toolUpdateProject:
 			return tm.handleUpdateProject(ctx, arguments)
-		case "delete_project":
+		case toolDeleteProject:
 			return tm.handleDeleteProject(ctx, arguments)
-		case "get_project_events":
+		case toolGetProjectEvent:
 			return tm.handleGetProjectEvents(ctx, arguments)
-		case "list_repositories":
+		case toolListRepositories:
 			return tm.handleListRepositories(ctx, arguments)
-		case "get_repository":
+		case toolGetRepository:
 			return tm.handleGetRepository(ctx, arguments)
-		case "create_repository":
+		case toolCreateRepository:
 			return tm.handleCreateRepository(ctx, arguments)
-		case "update_repository":
+		case toolUpdateRepository:
 			return tm.handleUpdateRepository(ctx, arguments)
-		case "delete_repository":
+		case toolDeleteRepository:
 			return tm.handleDeleteRepository(ctx, arguments)
-		case "validate_repository":
+		case toolValidateRepository:
 			return tm.handleValidateRepository(ctx, arguments)
-		case "list_clusters":
+		case toolListClusters:
 			return tm.handleListClusters(ctx, arguments)
-		case "get_cluster":
+		case toolGetCluster:
 			return tm.handleGetCluster(ctx, arguments)
-		case "create_cluster":
+		case toolCreateCluster:
 			return tm.handleCreateCluster(ctx, arguments)
-		case "update_cluster":
+		case toolUpdateCluster:
 			return tm.handleUpdateCluster(ctx, arguments)
-		case "delete_cluster":
+		case toolDeleteCluster:
 			return tm.handleDeleteCluster(ctx, arguments)
-		case "analyze_resource_efficiency":
+		case toolAnalyzeResourceEfficiency:
 			return tm.handleAnalyzeResourceEfficiency(ctx, arguments)
-		case "diagnose_application":
+		case toolDiagnoseApplication:
 			return tm.handleDiagnoseApplication(ctx, arguments)
-		case "terminate_operation":
+		case toolTerminateOperation:
 			return tm.handleTerminateOperation(ctx, arguments)
-		case "restart_pod":
+		case toolRestartPod:
 			return tm.handleRestartPod(ctx, arguments)
-		case "refresh_application":
+		case toolRefreshApplication:
 			return tm.handleRefreshApplication(ctx, arguments)
-		case "delete_hook":
+		case toolDeleteHook:
 			return tm.handleDeleteHook(ctx, arguments)
 		// ApplicationSet handlers
-		case "list_applicationsets":
+		case toolListApplicationSets:
 			return tm.handleListApplicationSets(ctx, arguments)
-		case "get_applicationset":
+		case toolGetApplicationSet:
 			return tm.handleGetApplicationSet(ctx, arguments)
-		case "preview_applicationset":
+		case toolPreviewApplicationSet:
 			return tm.handlePreviewApplicationSet(ctx, arguments)
-		case "create_applicationset":
+		case toolCreateApplicationSet:
 			return tm.handleCreateApplicationSet(ctx, arguments)
-		case "delete_applicationset":
+		case toolDeleteApplicationSet:
 			return tm.handleDeleteApplicationSet(ctx, arguments)
 		default:
 			return errorResult(fmt.Sprintf("Unknown tool: %s", name)), nil
@@ -1268,7 +1335,7 @@ func (tm *ToolManager) getApplicationFromList(ctx context.Context, name string) 
 }
 
 func (tm *ToolManager) handleCreateApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("create_application"); result != nil {
+	if result := tm.checkSafeMode(toolCreateApplication); result != nil {
 		return result, nil
 	}
 
@@ -1311,7 +1378,7 @@ func (tm *ToolManager) handleCreateApplication(ctx context.Context, arguments ma
 }
 
 func (tm *ToolManager) handleDeleteApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("delete_application"); result != nil {
+	if result := tm.checkDeleteAllowed(toolDeleteApplication); result != nil {
 		return result, nil
 	}
 
@@ -1334,7 +1401,7 @@ func (tm *ToolManager) handleDeleteApplication(ctx context.Context, arguments ma
 }
 
 func (tm *ToolManager) handleSyncApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("sync_application"); result != nil {
+	if result := tm.checkSafeMode(toolSyncApplication); result != nil {
 		return result, nil
 	}
 
@@ -1694,7 +1761,7 @@ func involvedObjField(event map[string]interface{}, field string) string {
 }
 
 func (tm *ToolManager) handleUpdateApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("update_application"); result != nil {
+	if result := tm.checkSafeMode(toolUpdateApplication); result != nil {
 		return result, nil
 	}
 
@@ -1738,7 +1805,7 @@ func (tm *ToolManager) handleUpdateApplication(ctx context.Context, arguments ma
 }
 
 func (tm *ToolManager) handleRollbackApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("rollback_application"); result != nil {
+	if result := tm.checkSafeMode(toolRollbackApplication); result != nil {
 		return result, nil
 	}
 
@@ -1807,7 +1874,7 @@ func (tm *ToolManager) handleListResourceActions(ctx context.Context, arguments 
 }
 
 func (tm *ToolManager) handleRunResourceAction(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("run_resource_action"); result != nil {
+	if result := tm.checkSafeMode(toolRunResourceAction); result != nil {
 		return result, nil
 	}
 
@@ -1886,7 +1953,7 @@ func (tm *ToolManager) handleGetApplicationResource(ctx context.Context, argumen
 }
 
 func (tm *ToolManager) handlePatchApplicationResource(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("patch_application_resource"); result != nil {
+	if result := tm.checkSafeMode(toolPatchApplicationResource); result != nil {
 		return result, nil
 	}
 
@@ -1934,7 +2001,7 @@ func (tm *ToolManager) handlePatchApplicationResource(ctx context.Context, argum
 }
 
 func (tm *ToolManager) handleDeleteApplicationResource(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("delete_application_resource"); result != nil {
+	if result := tm.checkDeleteAllowed(toolDeleteApplicationResource); result != nil {
 		return result, nil
 	}
 
@@ -2228,7 +2295,7 @@ func (tm *ToolManager) handleGetProject(ctx context.Context, arguments map[strin
 }
 
 func (tm *ToolManager) handleCreateProject(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("create_project"); result != nil {
+	if result := tm.checkSafeMode(toolCreateProject); result != nil {
 		return result, nil
 	}
 
@@ -2259,7 +2326,7 @@ func (tm *ToolManager) handleCreateProject(ctx context.Context, arguments map[st
 }
 
 func (tm *ToolManager) handleUpdateProject(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("update_project"); result != nil {
+	if result := tm.checkSafeMode(toolUpdateProject); result != nil {
 		return result, nil
 	}
 
@@ -2295,7 +2362,7 @@ func (tm *ToolManager) handleUpdateProject(ctx context.Context, arguments map[st
 }
 
 func (tm *ToolManager) handleDeleteProject(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("delete_project"); result != nil {
+	if result := tm.checkDeleteAllowed(toolDeleteProject); result != nil {
 		return result, nil
 	}
 
@@ -2400,7 +2467,7 @@ func (tm *ToolManager) handleGetRepository(ctx context.Context, arguments map[st
 }
 
 func (tm *ToolManager) handleCreateRepository(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("create_repository"); result != nil {
+	if result := tm.checkSafeMode(toolCreateRepository); result != nil {
 		return result, nil
 	}
 
@@ -2447,7 +2514,7 @@ func (tm *ToolManager) handleCreateRepository(ctx context.Context, arguments map
 }
 
 func (tm *ToolManager) handleUpdateRepository(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("update_repository"); result != nil {
+	if result := tm.checkSafeMode(toolUpdateRepository); result != nil {
 		return result, nil
 	}
 
@@ -2502,7 +2569,7 @@ func (tm *ToolManager) handleUpdateRepository(ctx context.Context, arguments map
 }
 
 func (tm *ToolManager) handleDeleteRepository(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("delete_repository"); result != nil {
+	if result := tm.checkDeleteAllowed(toolDeleteRepository); result != nil {
 		return result, nil
 	}
 
@@ -2601,7 +2668,7 @@ func (tm *ToolManager) handleGetCluster(ctx context.Context, arguments map[strin
 }
 
 func (tm *ToolManager) handleCreateCluster(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("create_cluster"); result != nil {
+	if result := tm.checkSafeMode(toolCreateCluster); result != nil {
 		return result, nil
 	}
 
@@ -2648,7 +2715,7 @@ func (tm *ToolManager) handleCreateCluster(ctx context.Context, arguments map[st
 }
 
 func (tm *ToolManager) handleUpdateCluster(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("update_cluster"); result != nil {
+	if result := tm.checkSafeMode(toolUpdateCluster); result != nil {
 		return result, nil
 	}
 
@@ -2704,7 +2771,7 @@ func (tm *ToolManager) handleUpdateCluster(ctx context.Context, arguments map[st
 }
 
 func (tm *ToolManager) handleDeleteCluster(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("delete_cluster"); result != nil {
+	if result := tm.checkDeleteAllowed(toolDeleteCluster); result != nil {
 		return result, nil
 	}
 
@@ -2966,7 +3033,7 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 
 // handleRefreshApplication forces ArgoCD to re-fetch manifests from Git
 func (tm *ToolManager) handleRefreshApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("refresh_application"); result != nil {
+	if result := tm.checkSafeMode(toolRefreshApplication); result != nil {
 		return result, nil
 	}
 
@@ -3016,7 +3083,7 @@ func (tm *ToolManager) handleRefreshApplication(ctx context.Context, arguments m
 
 // handleTerminateOperation terminates the currently running operation on an application
 func (tm *ToolManager) handleTerminateOperation(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("terminate_operation"); result != nil {
+	if result := tm.checkSafeMode(toolTerminateOperation); result != nil {
 		return result, nil
 	}
 
@@ -3052,7 +3119,7 @@ func (tm *ToolManager) handleTerminateOperation(ctx context.Context, arguments m
 
 // handleRestartPod deletes a pod within an application to trigger a controller restart
 func (tm *ToolManager) handleRestartPod(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("restart_pod"); result != nil {
+	if result := tm.checkDeleteAllowed(toolRestartPod); result != nil {
 		return result, nil
 	}
 
@@ -3106,7 +3173,7 @@ type HookInfo struct {
 
 // handleDeleteHook finds and deletes hook resources from an application's resource tree
 func (tm *ToolManager) handleDeleteHook(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	if result := tm.checkSafeMode("delete_hook"); result != nil {
+	if result := tm.checkDeleteAllowed(toolDeleteHook); result != nil {
 		return result, nil
 	}
 
@@ -3231,6 +3298,18 @@ func (tm *ToolManager) handleDeleteHook(ctx context.Context, arguments map[strin
 func (tm *ToolManager) checkSafeMode(operation string) *mcp.CallToolResult {
 	if tm.safeMode {
 		return errorResult(fmt.Sprintf("Operation '%s' is not allowed in read-only mode. To enable write operations, start the server with the --read-write flag or set server.safe_mode: false in your config.", operation))
+	}
+	return nil
+}
+
+// checkDeleteAllowed returns an error result if delete operations are not explicitly enabled.
+// Delete is gated separately from general write access because it is irreversible.
+func (tm *ToolManager) checkDeleteAllowed(operation string) *mcp.CallToolResult {
+	if tm.safeMode {
+		return errorResult(fmt.Sprintf("Operation '%s' is not allowed in read-only mode. To enable write operations, start the server with the --read-write flag or set server.safe_mode: false in your config.", operation))
+	}
+	if !tm.allowDeletes {
+		return errorResult(fmt.Sprintf("Operation '%s' requires delete permissions. Use the --allow-deletes flag or set server.allow_deletes: true in your config.", operation))
 	}
 	return nil
 }

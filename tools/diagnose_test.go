@@ -101,7 +101,7 @@ func newTestLogger() *logrus.Logger {
 // returns an error result.
 func TestDiagnoseApplication_MissingName(t *testing.T) {
 	mock := &MockArgoClient{}
-	tm := NewToolManager(mock, newTestLogger(), false)
+	tm := NewToolManager(mock, newTestLogger(), false, false)
 
 	result, err := tm.handleDiagnoseApplication(context.Background(), map[string]interface{}{})
 	if err != nil {
@@ -127,7 +127,7 @@ func TestDiagnoseApplication_HealthyApp(t *testing.T) {
 			return emptyEventListJSON(), nil
 		},
 	}
-	tm := NewToolManager(mock, newTestLogger(), false)
+	tm := NewToolManager(mock, newTestLogger(), false, false)
 
 	result, err := tm.handleDiagnoseApplication(context.Background(), map[string]interface{}{"name": "my-app"})
 	if err != nil {
@@ -173,7 +173,7 @@ func TestDiagnoseApplication_DegradedApp(t *testing.T) {
 			return emptyEventListJSON(), nil
 		},
 	}
-	tm := NewToolManager(mock, newTestLogger(), false)
+	tm := NewToolManager(mock, newTestLogger(), false, false)
 
 	result, err := tm.handleDiagnoseApplication(context.Background(), map[string]interface{}{"name": "broken-app"})
 	if err != nil {
@@ -237,7 +237,7 @@ func TestDiagnoseApplication_OutOfSyncResources(t *testing.T) {
 			return emptyEventListJSON(), nil
 		},
 	}
-	tm := NewToolManager(mock, newTestLogger(), false)
+	tm := NewToolManager(mock, newTestLogger(), false, false)
 
 	result, err := tm.handleDiagnoseApplication(context.Background(), map[string]interface{}{"name": "drifted-app"})
 	if err != nil {
@@ -283,7 +283,7 @@ func TestDiagnoseApplication_WarningEvents(t *testing.T) {
 			return warningEventListJSON("BackOff", "Back-off restarting failed container", "Pod", "web-abc123"), nil
 		},
 	}
-	tm := NewToolManager(mock, newTestLogger(), false)
+	tm := NewToolManager(mock, newTestLogger(), false, false)
 
 	result, err := tm.handleDiagnoseApplication(context.Background(), map[string]interface{}{"name": "event-app"})
 	if err != nil {
@@ -324,7 +324,7 @@ func TestDiagnoseApplication_DataSources(t *testing.T) {
 			return emptyEventListJSON(), nil
 		},
 	}
-	tm := NewToolManager(mock, newTestLogger(), false)
+	tm := NewToolManager(mock, newTestLogger(), false, false)
 
 	result, err := tm.handleDiagnoseApplication(context.Background(), map[string]interface{}{"name": "ds-app"})
 	if err != nil {
@@ -365,7 +365,7 @@ func TestDiagnoseApplication_NextActions(t *testing.T) {
 			return emptyEventListJSON(), nil
 		},
 	}
-	tm := NewToolManager(mock, newTestLogger(), false)
+	tm := NewToolManager(mock, newTestLogger(), false, false)
 
 	result, err := tm.handleDiagnoseApplication(context.Background(), map[string]interface{}{"name": "broken-app"})
 	if err != nil {
@@ -626,7 +626,7 @@ func TestDiagnoseApplication_PreviousLogsSignal(t *testing.T) {
 			}, nil
 		},
 	}
-	tm := NewToolManager(mock, newTestLogger(), false)
+	tm := NewToolManager(mock, newTestLogger(), false, false)
 
 	result, err := tm.handleDiagnoseApplication(context.Background(), map[string]interface{}{"name": "crashing-app"})
 	if err != nil {
@@ -679,7 +679,7 @@ func TestDiagnoseApplication_CategoryField(t *testing.T) {
 			return emptyEventListJSON(), nil
 		},
 	}
-	tm := NewToolManager(mock, newTestLogger(), false)
+	tm := NewToolManager(mock, newTestLogger(), false, false)
 
 	result, err := tm.handleDiagnoseApplication(context.Background(), map[string]interface{}{"name": "healthy-app"})
 	if err != nil {

@@ -21,10 +21,10 @@ import (
 )
 
 // testToolManager creates a ToolManager with a mock client for testing.
-func testToolManager(mock *MockArgoClient, safeMode bool) *ToolManager {
+func testToolManager(mock *MockArgoClient, safeMode bool, allowDeletes bool) *ToolManager {
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
-	return NewToolManager(mock, logger, safeMode)
+	return NewToolManager(mock, logger, safeMode, allowDeletes)
 }
 
 // parseResultYAML extracts and parses the YAML from a CallToolResult.
@@ -90,7 +90,7 @@ func TestHandleListApplications(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_applications", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
@@ -111,7 +111,7 @@ func TestHandleListApplications(t *testing.T) {
 				return &v1alpha1.ApplicationList{Items: apps}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_applications", map[string]interface{}{
 			"limit": float64(3),
 		})
@@ -128,7 +128,7 @@ func TestHandleListApplications(t *testing.T) {
 				return nil, fmt.Errorf("connection refused")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_applications", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
@@ -140,7 +140,7 @@ func TestHandleListApplications(t *testing.T) {
 				return &v1alpha1.ApplicationList{Items: []v1alpha1.Application{}}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_applications", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
@@ -154,7 +154,7 @@ func TestHandleListApplications(t *testing.T) {
 				return &v1alpha1.ApplicationList{Items: []v1alpha1.Application{}}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_applications", map[string]interface{}{
 			"limit": float64(200),
 		})
@@ -170,7 +170,7 @@ func TestHandleGetApplication(t *testing.T) {
 				return makeApp("myapp", "default", "https://github.com/test/repo"), nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -199,7 +199,7 @@ func TestHandleGetApplication(t *testing.T) {
 				return app, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application", map[string]interface{}{
 			"name": "nosource",
 		})
@@ -227,7 +227,7 @@ func TestHandleGetApplication(t *testing.T) {
 				return app, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application", map[string]interface{}{
 			"name": "empty-status",
 		})
@@ -241,7 +241,7 @@ func TestHandleGetApplication(t *testing.T) {
 				return nil, fmt.Errorf("not found")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application", map[string]interface{}{
 			"name": "doesnotexist",
 		})
@@ -257,7 +257,7 @@ func TestHandleCreateApplication(t *testing.T) {
 				return makeApp(req.Application.Name, req.Application.Spec.Project, req.Application.Spec.Source.RepoURL), nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "create_application", map[string]interface{}{
 			"name":     "newapp",
 			"project":  "default",
@@ -272,7 +272,7 @@ func TestHandleCreateApplication(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "create_application", map[string]interface{}{
 			"name":     "newapp",
 			"project":  "default",
@@ -290,7 +290,7 @@ func TestHandleCreateApplication(t *testing.T) {
 				return nil, fmt.Errorf("already exists")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "create_application", map[string]interface{}{
 			"name":     "existing",
 			"project":  "default",
@@ -309,7 +309,7 @@ func TestHandleDeleteApplication(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_application", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -321,12 +321,23 @@ func TestHandleDeleteApplication(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "delete_application", map[string]interface{}{
 			"name": "myapp",
 		})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
+	})
+
+	t.Run("blocked without allow-deletes", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, false, false)
+		result, err := tm.CallTool(context.Background(), "delete_application", map[string]interface{}{
+			"name": "myapp",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "allow-deletes")
 	})
 }
 
@@ -337,7 +348,7 @@ func TestHandleSyncApplication(t *testing.T) {
 				return makeApp("myapp", "default", "https://github.com/test/repo"), nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "sync_application", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -356,7 +367,7 @@ func TestHandleSyncApplication(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "sync_application", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -366,7 +377,7 @@ func TestHandleSyncApplication(t *testing.T) {
 
 	t.Run("prune blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "sync_application", map[string]interface{}{
 			"name":  "myapp",
 			"prune": true,
@@ -377,7 +388,7 @@ func TestHandleSyncApplication(t *testing.T) {
 
 	t.Run("sync without prune blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "sync_application", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -393,7 +404,7 @@ func TestHandleRollbackApplication(t *testing.T) {
 				return makeApp("myapp", "default", "https://github.com/test/repo"), nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "rollback_application", map[string]interface{}{
 			"name":     "myapp",
 			"revision": "abc123",
@@ -406,7 +417,7 @@ func TestHandleRollbackApplication(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "rollback_application", map[string]interface{}{
 			"name":     "myapp",
 			"revision": "abc123",
@@ -427,7 +438,7 @@ func TestHandleUpdateApplication(t *testing.T) {
 				return req.Application, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "update_application", map[string]interface{}{
 			"name":            "myapp",
 			"target_revision": "v2.0",
@@ -438,7 +449,7 @@ func TestHandleUpdateApplication(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "update_application", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -466,7 +477,7 @@ func TestHandleUpdateApplication(t *testing.T) {
 				return req.Application, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "update_application", map[string]interface{}{
 			"name":     "nosource",
 			"repo_url": "https://github.com/new/repo",
@@ -488,7 +499,7 @@ func TestHandleGetApplicationManifests(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application_manifests", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -505,7 +516,7 @@ func TestHandleGetApplicationManifests(t *testing.T) {
 				return nil, fmt.Errorf("not found")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application_manifests", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -538,7 +549,7 @@ func TestHandleGetApplicationDiff(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application_diff", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -554,7 +565,7 @@ func TestHandleGetApplicationDiff(t *testing.T) {
 				return []*v1alpha1.ResourceDiff{}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application_diff", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -583,7 +594,7 @@ func TestHandleGetApplicationEvents(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application_events", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -620,7 +631,7 @@ func TestHandleGetApplicationEvents(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application_events", map[string]interface{}{
 			"name":          "myapp",
 			"resource_name": "deploy1",
@@ -638,7 +649,7 @@ func TestHandleGetApplicationEvents(t *testing.T) {
 				return nil, fmt.Errorf("connection error")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application_events", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -657,7 +668,7 @@ func TestHandleGetLogs(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_logs", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -675,7 +686,7 @@ func TestHandleGetLogs(t *testing.T) {
 				return []client.ApplicationLogEntry{}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_logs", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -689,7 +700,7 @@ func TestHandleGetLogs(t *testing.T) {
 				return nil, fmt.Errorf("pod not found")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_logs", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -708,7 +719,7 @@ func TestHandleListResourceActions(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_resource_actions", map[string]interface{}{
 			"name":          "myapp",
 			"kind":          "Deployment",
@@ -729,7 +740,7 @@ func TestHandleRunResourceAction(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "run_resource_action", map[string]interface{}{
 			"name":          "myapp",
 			"group":         "apps",
@@ -743,7 +754,7 @@ func TestHandleRunResourceAction(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "run_resource_action", map[string]interface{}{
 			"name":          "myapp",
 			"group":         "apps",
@@ -767,7 +778,7 @@ func TestHandleGetApplicationResource(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_application_resource", map[string]interface{}{
 			"name":          "myapp",
 			"kind":          "Deployment",
@@ -785,7 +796,7 @@ func TestHandlePatchApplicationResource(t *testing.T) {
 				return map[string]interface{}{"patched": true}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "patch_application_resource", map[string]interface{}{
 			"name":          "myapp",
 			"kind":          "Deployment",
@@ -798,7 +809,7 @@ func TestHandlePatchApplicationResource(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "patch_application_resource", map[string]interface{}{
 			"name":          "myapp",
 			"kind":          "Deployment",
@@ -817,7 +828,7 @@ func TestHandleDeleteApplicationResource(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_application_resource", map[string]interface{}{
 			"name":          "myapp",
 			"kind":          "Pod",
@@ -829,7 +840,7 @@ func TestHandleDeleteApplicationResource(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "delete_application_resource", map[string]interface{}{
 			"name":          "myapp",
 			"kind":          "Pod",
@@ -837,6 +848,19 @@ func TestHandleDeleteApplicationResource(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
+	})
+
+	t.Run("blocked without allow-deletes", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, false, false)
+		result, err := tm.CallTool(context.Background(), "delete_application_resource", map[string]interface{}{
+			"name":          "myapp",
+			"kind":          "Pod",
+			"resource_name": "my-pod",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "allow-deletes")
 	})
 }
 
@@ -856,7 +880,7 @@ func TestHandleListProjects(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_projects", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
@@ -870,7 +894,7 @@ func TestHandleListProjects(t *testing.T) {
 				return nil, fmt.Errorf("forbidden")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_projects", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
@@ -890,7 +914,7 @@ func TestHandleGetProject(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_project", map[string]interface{}{
 			"name": "myproject",
 		})
@@ -911,7 +935,7 @@ func TestHandleCreateProject(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "create_project", map[string]interface{}{
 			"name":        "newproj",
 			"description": "A new project",
@@ -922,7 +946,7 @@ func TestHandleCreateProject(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "create_project", map[string]interface{}{
 			"name": "newproj",
 		})
@@ -944,7 +968,7 @@ func TestHandleUpdateProject(t *testing.T) {
 				return req.Project, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "update_project", map[string]interface{}{
 			"name":        "myproject",
 			"description": "new desc",
@@ -955,7 +979,7 @@ func TestHandleUpdateProject(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "update_project", map[string]interface{}{
 			"name": "myproject",
 		})
@@ -971,7 +995,7 @@ func TestHandleDeleteProject(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_project", map[string]interface{}{
 			"name": "myproject",
 		})
@@ -981,12 +1005,23 @@ func TestHandleDeleteProject(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "delete_project", map[string]interface{}{
 			"name": "myproject",
 		})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
+	})
+
+	t.Run("blocked without allow-deletes", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, false, false)
+		result, err := tm.CallTool(context.Background(), "delete_project", map[string]interface{}{
+			"name": "myproject",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "allow-deletes")
 	})
 }
 
@@ -999,7 +1034,7 @@ func TestHandleGetProjectEvents(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_project_events", map[string]interface{}{
 			"name": "myproject",
 		})
@@ -1024,7 +1059,7 @@ func TestHandleListRepositories(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_repositories", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
@@ -1044,7 +1079,7 @@ func TestHandleGetRepository(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_repository", map[string]interface{}{
 			"repo_url": "https://github.com/test/repo",
 		})
@@ -1066,7 +1101,7 @@ func TestHandleCreateRepository(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "create_repository", map[string]interface{}{
 			"repo_url": "https://github.com/test/new-repo",
 			"type":     "git",
@@ -1078,7 +1113,7 @@ func TestHandleCreateRepository(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "create_repository", map[string]interface{}{
 			"repo_url": "https://github.com/test/new-repo",
 		})
@@ -1088,7 +1123,7 @@ func TestHandleCreateRepository(t *testing.T) {
 
 	t.Run("missing repo_url", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "create_repository", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
@@ -1109,7 +1144,7 @@ func TestHandleUpdateRepository(t *testing.T) {
 				return req.Repo, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "update_repository", map[string]interface{}{
 			"repo_url": "https://github.com/test/repo",
 			"name":     "new-name",
@@ -1120,7 +1155,7 @@ func TestHandleUpdateRepository(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "update_repository", map[string]interface{}{
 			"repo_url": "https://github.com/test/repo",
 		})
@@ -1136,7 +1171,7 @@ func TestHandleDeleteRepository(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_repository", map[string]interface{}{
 			"repo_url": "https://github.com/test/repo",
 		})
@@ -1146,12 +1181,23 @@ func TestHandleDeleteRepository(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "delete_repository", map[string]interface{}{
 			"repo_url": "https://github.com/test/repo",
 		})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
+	})
+
+	t.Run("blocked without allow-deletes", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, false, false)
+		result, err := tm.CallTool(context.Background(), "delete_repository", map[string]interface{}{
+			"repo_url": "https://github.com/test/repo",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "allow-deletes")
 	})
 }
 
@@ -1162,7 +1208,7 @@ func TestHandleValidateRepository(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "validate_repository", map[string]interface{}{
 			"repo_url": "https://github.com/test/repo",
 		})
@@ -1178,7 +1224,7 @@ func TestHandleValidateRepository(t *testing.T) {
 				return fmt.Errorf("authentication failed")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "validate_repository", map[string]interface{}{
 			"repo_url": "https://github.com/test/private-repo",
 		})
@@ -1205,7 +1251,7 @@ func TestHandleListClusters(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "list_clusters", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.False(t, result.IsError)
@@ -1224,7 +1270,7 @@ func TestHandleGetCluster(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "get_cluster", map[string]interface{}{
 			"server": "https://kubernetes.default.svc",
 		})
@@ -1245,7 +1291,7 @@ func TestHandleCreateCluster(t *testing.T) {
 				}, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "create_cluster", map[string]interface{}{
 			"server": "https://new-cluster:6443",
 			"name":   "new-cluster",
@@ -1259,7 +1305,7 @@ func TestHandleCreateCluster(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "create_cluster", map[string]interface{}{
 			"server": "https://new-cluster:6443",
 		})
@@ -1269,7 +1315,7 @@ func TestHandleCreateCluster(t *testing.T) {
 
 	t.Run("missing server", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "create_cluster", map[string]interface{}{})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
@@ -1289,7 +1335,7 @@ func TestHandleUpdateCluster(t *testing.T) {
 				return req.Cluster, nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "update_cluster", map[string]interface{}{
 			"server": "https://cluster:6443",
 			"name":   "new-name",
@@ -1300,7 +1346,7 @@ func TestHandleUpdateCluster(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "update_cluster", map[string]interface{}{
 			"server": "https://cluster:6443",
 		})
@@ -1316,7 +1362,7 @@ func TestHandleDeleteCluster(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_cluster", map[string]interface{}{
 			"server": "https://cluster:6443",
 		})
@@ -1326,12 +1372,23 @@ func TestHandleDeleteCluster(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "delete_cluster", map[string]interface{}{
 			"server": "https://cluster:6443",
 		})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
+	})
+
+	t.Run("blocked without allow-deletes", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, false, false)
+		result, err := tm.CallTool(context.Background(), "delete_cluster", map[string]interface{}{
+			"server": "https://cluster:6443",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "allow-deletes")
 	})
 }
 
@@ -1341,7 +1398,7 @@ func TestHandleDeleteCluster(t *testing.T) {
 
 func TestCallToolUnknownTool(t *testing.T) {
 	mock := &MockArgoClient{}
-	tm := testToolManager(mock, false)
+	tm := testToolManager(mock, false, false)
 	result, err := tm.CallTool(context.Background(), "nonexistent_tool", map[string]interface{}{})
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
@@ -1349,7 +1406,7 @@ func TestCallToolUnknownTool(t *testing.T) {
 
 func TestGetToolNames(t *testing.T) {
 	mock := &MockArgoClient{}
-	tm := testToolManager(mock, false)
+	tm := testToolManager(mock, false, false)
 	names := tm.GetToolNames()
 	assert.NotEmpty(t, names)
 	assert.Contains(t, names, "list_applications")
@@ -1361,7 +1418,7 @@ func TestGetToolNames(t *testing.T) {
 
 func TestGetServerTools(t *testing.T) {
 	mock := &MockArgoClient{}
-	tm := testToolManager(mock, false)
+	tm := testToolManager(mock, false, false)
 	tools := tm.GetServerTools()
 	assert.NotEmpty(t, tools)
 	for _, tool := range tools {
@@ -1623,7 +1680,7 @@ func TestHandleTerminateOperation(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "terminate_operation", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -1643,7 +1700,7 @@ func TestHandleTerminateOperation(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "terminate_operation", map[string]interface{}{
 			"name":          "myapp",
 			"app_namespace": "argocd",
@@ -1659,7 +1716,7 @@ func TestHandleTerminateOperation(t *testing.T) {
 				return fmt.Errorf("no operation running")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, false)
 		result, err := tm.CallTool(context.Background(), "terminate_operation", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -1669,7 +1726,7 @@ func TestHandleTerminateOperation(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "terminate_operation", map[string]interface{}{
 			"name": "myapp",
 		})
@@ -1697,7 +1754,7 @@ func TestHandleRestartPod(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "restart_pod", map[string]interface{}{
 			"name":      "myapp",
 			"pod_name":  "my-pod-xyz",
@@ -1717,7 +1774,7 @@ func TestHandleRestartPod(t *testing.T) {
 				return fmt.Errorf("pod not found")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "restart_pod", map[string]interface{}{
 			"name":      "myapp",
 			"pod_name":  "nonexistent-pod",
@@ -1729,7 +1786,7 @@ func TestHandleRestartPod(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "restart_pod", map[string]interface{}{
 			"name":      "myapp",
 			"pod_name":  "my-pod-xyz",
@@ -1738,6 +1795,19 @@ func TestHandleRestartPod(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
 		assert.Contains(t, parseResultText(t, result), "read-only mode")
+	})
+
+	t.Run("blocked without allow-deletes", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, false, false)
+		result, err := tm.CallTool(context.Background(), "restart_pod", map[string]interface{}{
+			"name":      "myapp",
+			"pod_name":  "my-pod-xyz",
+			"namespace": "default",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "allow-deletes")
 	})
 }
 
@@ -1777,7 +1847,7 @@ func TestHandleDeleteHook(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
 			"name":      "myapp",
 			"hook_name": "post-migrate",
@@ -1801,7 +1871,7 @@ func TestHandleDeleteHook(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
 			"name":      "myapp",
 			"hook_name": "my-hook",
@@ -1819,7 +1889,7 @@ func TestHandleDeleteHook(t *testing.T) {
 				return makeTree(), nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
 			"name":      "myapp",
 			"hook_name": "nonexistent",
@@ -1835,7 +1905,7 @@ func TestHandleDeleteHook(t *testing.T) {
 				return nil, fmt.Errorf("app not found")
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
 			"name":      "myapp",
 			"hook_name": "my-hook",
@@ -1861,7 +1931,7 @@ func TestHandleDeleteHook(t *testing.T) {
 				return nil
 			},
 		}
-		tm := testToolManager(mock, false)
+		tm := testToolManager(mock, false, true)
 		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
 			"name":      "myapp",
 			"hook_name": "my-hook",
@@ -1876,7 +1946,7 @@ func TestHandleDeleteHook(t *testing.T) {
 
 	t.Run("blocked in safe mode", func(t *testing.T) {
 		mock := &MockArgoClient{}
-		tm := testToolManager(mock, true)
+		tm := testToolManager(mock, true, false)
 		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
 			"name":      "myapp",
 			"hook_name": "my-hook",
@@ -1884,5 +1954,17 @@ func TestHandleDeleteHook(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
 		assert.Contains(t, parseResultText(t, result), "read-only mode")
+	})
+
+	t.Run("blocked without allow-deletes", func(t *testing.T) {
+		mock := &MockArgoClient{}
+		tm := testToolManager(mock, false, false)
+		result, err := tm.CallTool(context.Background(), "delete_hook", map[string]interface{}{
+			"name":      "myapp",
+			"hook_name": "my-hook",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Contains(t, parseResultText(t, result), "allow-deletes")
 	})
 }

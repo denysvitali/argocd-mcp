@@ -62,13 +62,13 @@ func makeLiveDeploymentJSON(name, namespace string, replicas int32, containers [
 func testToolManagerWithMetrics(mock *MockArgoClient, metricsClient KubeMetricsClient) *ToolManager {
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
-	return NewToolManagerWithMetrics(mock, metricsClient, logger, false)
+	return NewToolManagerWithMetrics(mock, metricsClient, logger, false, false)
 }
 
 // --- Tests ---
 
 func TestAnalyzeResourceEfficiency_MissingName(t *testing.T) {
-	tm := testToolManager(&MockArgoClient{}, false)
+	tm := testToolManager(&MockArgoClient{}, false, false)
 	result, err := tm.CallTool(context.Background(), "analyze_resource_efficiency", map[string]interface{}{})
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
@@ -83,7 +83,7 @@ func TestAnalyzeResourceEfficiency_NoWorkloads(t *testing.T) {
 			}, nil
 		},
 	}
-	tm := testToolManager(mock, false)
+	tm := testToolManager(mock, false, false)
 	result, err := tm.CallTool(context.Background(), "analyze_resource_efficiency", map[string]interface{}{
 		"name": "my-app",
 	})
@@ -118,7 +118,7 @@ func TestAnalyzeResourceEfficiency_NoMetricsClient(t *testing.T) {
 	}
 
 	// No metrics client — kubeMetrics is nil.
-	tm := testToolManager(mock, false)
+	tm := testToolManager(mock, false, false)
 	result, err := tm.CallTool(context.Background(), "analyze_resource_efficiency", map[string]interface{}{
 		"name": "my-app",
 	})
@@ -257,7 +257,7 @@ func TestAnalyzeResourceEfficiency_MissingRequests(t *testing.T) {
 		},
 	}
 
-	tm := testToolManager(mock, false)
+	tm := testToolManager(mock, false, false)
 	result, err := tm.CallTool(context.Background(), "analyze_resource_efficiency", map[string]interface{}{
 		"name": "unconstrained-app",
 	})

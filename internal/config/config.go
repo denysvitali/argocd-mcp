@@ -29,8 +29,9 @@ type ArgoCDConfig struct {
 }
 
 type ServerConfig struct {
-	MCPEndpoint string `mapstructure:"mcp_endpoint"`
-	SafeMode    bool   `mapstructure:"safe_mode"`
+	MCPEndpoint  string `mapstructure:"mcp_endpoint"`
+	SafeMode     bool   `mapstructure:"safe_mode"`
+	AllowDeletes bool   `mapstructure:"allow_deletes"`
 }
 
 type LoggingConfig struct {
@@ -46,6 +47,7 @@ func LoadConfig(logger *logrus.Logger) (*Config, error) {
 	v.SetDefault("argocd.insecure", false)
 	v.SetDefault("server.mcp_endpoint", "stdio")
 	v.SetDefault("server.safe_mode", true)
+	v.SetDefault("server.allow_deletes", false)
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.format", "json")
 
