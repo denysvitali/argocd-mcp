@@ -104,7 +104,7 @@ func TestLoadConfig_DefaultValues(t *testing.T) {
 	assert.Equal(t, "localhost:8080", cfg.ArgoCD.Server)
 	assert.False(t, cfg.ArgoCD.Insecure)
 	assert.Equal(t, "stdio", cfg.Server.MCPEndpoint)
-	assert.False(t, cfg.Server.SafeMode)
+	assert.True(t, cfg.Server.SafeMode)
 	assert.Equal(t, "info", cfg.Logging.Level)
 	assert.Equal(t, "json", cfg.Logging.Format)
 }

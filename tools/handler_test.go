@@ -375,18 +375,14 @@ func TestHandleSyncApplication(t *testing.T) {
 		assert.True(t, result.IsError)
 	})
 
-	t.Run("sync without prune allowed in safe mode", func(t *testing.T) {
-		mock := &MockArgoClient{
-			SyncApplicationFn: func(_ context.Context, _ *application.ApplicationSyncRequest) (*v1alpha1.Application, error) {
-				return makeApp("myapp", "default", "https://github.com/test/repo"), nil
-			},
-		}
+	t.Run("sync without prune blocked in safe mode", func(t *testing.T) {
+		mock := &MockArgoClient{}
 		tm := testToolManager(mock, true)
 		result, err := tm.CallTool(context.Background(), "sync_application", map[string]interface{}{
 			"name": "myapp",
 		})
 		require.NoError(t, err)
-		assert.False(t, result.IsError)
+		assert.True(t, result.IsError)
 	})
 }
 
@@ -1679,7 +1675,7 @@ func TestHandleTerminateOperation(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
-		assert.Contains(t, parseResultText(t, result), "safe mode")
+		assert.Contains(t, parseResultText(t, result), "read-only mode")
 	})
 }
 
@@ -1741,7 +1737,7 @@ func TestHandleRestartPod(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
-		assert.Contains(t, parseResultText(t, result), "safe mode")
+		assert.Contains(t, parseResultText(t, result), "read-only mode")
 	})
 }
 
@@ -1887,6 +1883,6 @@ func TestHandleDeleteHook(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
-		assert.Contains(t, parseResultText(t, result), "safe mode")
+		assert.Contains(t, parseResultText(t, result), "read-only mode")
 	})
 }

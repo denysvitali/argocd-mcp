@@ -1334,14 +1334,13 @@ func (tm *ToolManager) handleDeleteApplication(ctx context.Context, arguments ma
 }
 
 func (tm *ToolManager) handleSyncApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("sync_application"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 	revision := String(arguments, "revision", "")
 	prune := Bool(arguments, "prune", false)
-
-	// In safe mode, prune is not allowed
-	if tm.safeMode && prune {
-		return errorResult("sync_application with prune=true is not allowed in safe mode"), nil
-	}
 
 	pruneValue := prune
 	syncReq := &application.ApplicationSyncRequest{
@@ -2967,6 +2966,10 @@ func formatApplicationDetail(app *v1alpha1.Application) map[string]interface{} {
 
 // handleRefreshApplication forces ArgoCD to re-fetch manifests from Git
 func (tm *ToolManager) handleRefreshApplication(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	if result := tm.checkSafeMode("refresh_application"); result != nil {
+		return result, nil
+	}
+
 	name := String(arguments, "name", "")
 	refreshType := String(arguments, "refresh_type", "hard")
 
@@ -3227,7 +3230,7 @@ func (tm *ToolManager) handleDeleteHook(ctx context.Context, arguments map[strin
 // checkSafeMode returns an error result if safe mode is enabled for write operations
 func (tm *ToolManager) checkSafeMode(operation string) *mcp.CallToolResult {
 	if tm.safeMode {
-		return errorResult(fmt.Sprintf("Operation '%s' is not allowed in safe mode. Safe mode restricts write operations for security.", operation))
+		return errorResult(fmt.Sprintf("Operation '%s' is not allowed in read-only mode. To enable write operations, start the server with the --read-write flag or set server.safe_mode: false in your config.", operation))
 	}
 	return nil
 }

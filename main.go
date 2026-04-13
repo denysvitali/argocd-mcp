@@ -83,6 +83,9 @@ The server communicates over stdio by default.`,
 			if grpcWebRootPath, _ := cmd.Flags().GetString("grpc-web-root-path"); grpcWebRootPath != "" {
 				cfg.ArgoCD.GRPCWebRootPath = grpcWebRootPath
 			}
+			if readWrite, _ := cmd.Flags().GetBool("read-write"); readWrite {
+				cfg.Server.SafeMode = false
+			}
 
 			// Set log level
 			logLevel, err := logrus.ParseLevel(cfg.Logging.Level)
@@ -91,6 +94,12 @@ The server communicates over stdio by default.`,
 				logLevel = logrus.InfoLevel
 			}
 			logger.SetLevel(logLevel)
+
+			if cfg.Server.SafeMode {
+				logger.Info("Running in read-only mode (write operations disabled). Use --read-write to enable writes.")
+			} else {
+				logger.Warn("Running in read-write mode (write operations enabled)")
+			}
 
 			logger.WithField("server", cfg.ArgoCD.Server).Info("Connecting to ArgoCD")
 
@@ -141,9 +150,10 @@ The server communicates over stdio by default.`,
 		},
 	}
 
-	// Add gRPC-Web flags to serveCmd
+	// Add flags to serveCmd
 	serveCmd.Flags().Bool("grpc-web", false, "Enable gRPC-Web mode (use when ArgoCD is behind a reverse proxy that doesn't support native gRPC)")
 	serveCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests (e.g., /argo-cd)")
+	serveCmd.Flags().Bool("read-write", false, "Enable write operations (overrides read-only default and config file)")
 
 	// Config init command
 	configCmd := &cobra.Command{
@@ -210,7 +220,7 @@ Or run interactively without flags:
 				},
 				Server: config.ServerConfig{
 					MCPEndpoint: "stdio",
-					SafeMode:    false,
+					SafeMode:    true,
 				},
 				Logging: config.LoggingConfig{
 					Level:  "info",
@@ -283,6 +293,11 @@ Or run interactively without flags:
 				fmt.Printf("gRPC-Web Root Path: %s\n", cfg.ArgoCD.GRPCWebRootPath)
 			}
 			fmt.Printf("MCP Endpoint: %s\n", cfg.Server.MCPEndpoint)
+			if cfg.Server.SafeMode {
+				fmt.Printf("Mode: read-only (write operations disabled)\n")
+			} else {
+				fmt.Printf("Mode: read-write (write operations enabled)\n")
+			}
 			if cfg.ArgoCD.Token != "" {
 				fmt.Printf("Token: %s\n", auth.MaskToken(cfg.ArgoCD.Token))
 			}

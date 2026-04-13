@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/applicationset"
@@ -310,7 +309,7 @@ func TestHandleCreateApplicationSet_SafeMode(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 	text := parseResultText(t, result)
-	assert.True(t, strings.Contains(text, "safe mode") || strings.Contains(text, "Safe Mode"))
+	assert.Contains(t, text, "read-only mode")
 }
 
 func TestHandleCreateApplicationSet_Success(t *testing.T) {
