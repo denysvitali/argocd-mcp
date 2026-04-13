@@ -92,6 +92,38 @@ const (
 	toolAnalyzeResourceEfficiency = "analyze_resource_efficiency"
 )
 
+// writeTools lists tools that mutate state and are blocked in safe (read-only) mode.
+var writeTools = map[string]bool{
+	toolCreateApplication:        true,
+	toolUpdateApplication:        true,
+	toolSyncApplication:          true,
+	toolRollbackApplication:      true,
+	toolRefreshApplication:       true,
+	toolRunResourceAction:        true,
+	toolPatchApplicationResource: true,
+	toolTerminateOperation:       true,
+	toolCreateProject:            true,
+	toolUpdateProject:            true,
+	toolCreateRepository:         true,
+	toolUpdateRepository:         true,
+	toolCreateCluster:            true,
+	toolUpdateCluster:            true,
+	toolCreateApplicationSet:     true,
+}
+
+// deleteTools lists tools that destroy resources and require explicit delete permission.
+// They are also blocked in safe mode.
+var deleteTools = map[string]bool{
+	toolDeleteApplication:         true,
+	toolDeleteApplicationResource: true,
+	toolDeleteHook:                true,
+	toolRestartPod:                true,
+	toolDeleteProject:             true,
+	toolDeleteRepository:          true,
+	toolDeleteCluster:             true,
+	toolDeleteApplicationSet:      true,
+}
+
 // ToolManager manages the MCP tools for ArgoCD
 type ToolManager struct {
 	client       ArgoClient
@@ -126,11 +158,19 @@ func NewToolManagerWithMetrics(client ArgoClient, kubeMetrics KubeMetricsClient,
 	}
 }
 
-// GetServerTools returns all the server tools
+// GetServerTools returns tools filtered by the current access mode.
+// Write and delete tools are omitted in safe (read-only) mode; delete tools
+// are also omitted when allowDeletes is false.
 func (tm *ToolManager) GetServerTools() []server.ServerTool {
 	tm.defineTools()
 	var serverTools []server.ServerTool
 	for _, tool := range tm.tools {
+		if tm.safeMode && (writeTools[tool.Name] || deleteTools[tool.Name]) {
+			continue
+		}
+		if !tm.allowDeletes && deleteTools[tool.Name] {
+			continue
+		}
 		serverTools = append(serverTools, server.ServerTool{
 			Tool:    tool,
 			Handler: tm.getToolHandler(tool.Name),
