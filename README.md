@@ -12,17 +12,23 @@ A Model Context Protocol (MCP) server for ArgoCD, allowing you to interact with 
 
 ## Installation
 
+### Using go install
+
+```bash
+go install github.com/denysvitali/argocd-mcp@main
+```
+
 ### From Source
 
 ```bash
-git clone https://github.com/argocd-mcp/argocd-mcp.git
+git clone https://github.com/denysvitali/argocd-mcp.git
 cd argocd-mcp
-go build -o argocd-mcp ./cmd/argocd-mcp
+go build -o argocd-mcp .
 ```
 
 ### From Release
 
-Download the appropriate binary from the [releases page](https://github.com/argocd-mcp/argocd-mcp/releases).
+Download the appropriate binary from the [releases page](https://github.com/denysvitali/argocd-mcp/releases).
 
 ## Configuration
 
