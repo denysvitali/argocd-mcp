@@ -296,11 +296,146 @@ Or run interactively without flags:
 	authCmd := &cobra.Command{
 		Use:   "auth login",
 		Short: "Update authentication token",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("This command will be used to update the authentication token")
-			fmt.Println("For now, please update your config file directly")
+		Long: `Update authentication token for ArgoCD.
+
+Use --sso for Single Sign-On (OIDC) authentication:
+  argocd-mcp auth login --sso
+
+Use username/password for basic authentication:
+  argocd-mcp auth login -u admin -p password`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.LoadConfig(logger)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+
+			// Get flags
+			server, _ := cmd.Flags().GetString("server")
+			username, _ := cmd.Flags().GetString("username")
+			password, _ := cmd.Flags().GetString("password")
+			sso, _ := cmd.Flags().GetBool("sso")
+			insecure, _ := cmd.Flags().GetBool("insecure")
+			plaintext, _ := cmd.Flags().GetBool("plaintext")
+			grpcWeb, _ := cmd.Flags().GetBool("grpc-web")
+			grpcWebRootPath, _ := cmd.Flags().GetString("grpc-web-root-path")
+
+			// Override config with CLI flags
+			if server != "" {
+				cfg.ArgoCD.Server = server
+			}
+			if insecure {
+				cfg.ArgoCD.Insecure = insecure
+			}
+			if plaintext {
+				cfg.ArgoCD.PlainText = plaintext
+			}
+			if grpcWeb {
+				cfg.ArgoCD.GRPCWeb = grpcWeb
+			}
+			if grpcWebRootPath != "" {
+				cfg.ArgoCD.GRPCWebRootPath = grpcWebRootPath
+			}
+
+			var authToken string
+			var authUser string
+
+			if sso {
+				// SSO login
+				auth.PrintInfo("Starting SSO login to " + cfg.ArgoCD.Server + "...")
+
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
+
+				result, err := auth.SSOLogin(ctx, logger, auth.SSOLoginRequest{
+					Server:          cfg.ArgoCD.Server,
+					AuthURL:         cfg.ArgoCD.AuthURL,
+					Insecure:        cfg.ArgoCD.Insecure,
+					PlainText:       cfg.ArgoCD.PlainText,
+					GRPCWeb:         cfg.ArgoCD.GRPCWeb,
+					GRPCWebRootPath: cfg.ArgoCD.GRPCWebRootPath,
+					SkipVerify:      cfg.ArgoCD.SSOSkipVerify,
+				})
+				if err != nil {
+					return fmt.Errorf("SSO login failed: %w", err)
+				}
+				authToken = result.Token
+				authUser = result.User
+			} else {
+				// Username/password login
+				if username == "" {
+					username, _ = cmd.Flags().GetString("username")
+				}
+				if password == "" {
+					password, _ = cmd.Flags().GetString("password")
+				}
+
+				// Interactive if no credentials provided
+				if username == "" || password == "" {
+					fmt.Println("ArgoCD Authentication")
+					fmt.Println("======================")
+
+					if username == "" {
+						fmt.Print("Username: ")
+						fmt.Scanln(&username)
+					}
+					if password == "" {
+						fmt.Print("Password: ")
+						fmt.Scanln(&password)
+					}
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+
+				var err error
+				authToken, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, username, password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
+				if err != nil {
+					return fmt.Errorf("login failed: %w", err)
+				}
+				authUser = username
+			}
+
+			// Update config with new token
+			cfg.ArgoCD.Token = authToken
+			if username != "" {
+				cfg.ArgoCD.Username = username
+			}
+			if password != "" {
+				cfg.ArgoCD.Password = password
+			}
+
+			// Save config
+			configDir := filepath.Join(os.Getenv("HOME"), ".config", "argocd-mcp")
+			if err := os.MkdirAll(configDir, 0755); err != nil {
+				return fmt.Errorf("failed to create config directory: %w", err)
+			}
+
+			configPath := filepath.Join(configDir, "config.yaml")
+			data, err := yaml.Marshal(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to marshal config: %w", err)
+			}
+
+			if err := os.WriteFile(configPath, data, 0600); err != nil {
+				return fmt.Errorf("failed to write config file: %w", err)
+			}
+
+			auth.PrintSuccess("Authentication saved to " + configPath)
+			auth.PrintInfo("User: " + authUser)
+			return nil
 		},
 	}
+
+	// Add flags to auth login command
+	authCmd.Flags().StringP("server", "s", "", "ArgoCD server address")
+	authCmd.Flags().StringP("username", "u", "", "Username for authentication")
+	authCmd.Flags().StringP("password", "p", "", "Password for authentication")
+	authCmd.Flags().StringP("token", "t", "", "Authentication token (alternative to username/password)")
+	authCmd.Flags().Bool("sso", false, "Use Single Sign-On (SSO) authentication")
+	authCmd.Flags().BoolP("insecure", "k", false, "Skip TLS certificate verification")
+	authCmd.Flags().Bool("plaintext", false, "Use HTTP without TLS")
+	authCmd.Flags().Bool("grpc-web", false, "Enable gRPC-Web mode")
+	authCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests")
 
 	// Test connection command
 	testCmd := &cobra.Command{

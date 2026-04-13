@@ -25,6 +25,7 @@ type ArgoCDConfig struct {
 	CertFile        string `mapstructure:"cert_file"`
 	GRPCWeb         bool   `mapstructure:"grpc_web"`
 	GRPCWebRootPath string `mapstructure:"grpc_web_root_path"`
+	SSOSkipVerify   bool   `mapstructure:"sso_skip_verify"`
 }
 
 type ServerConfig struct {
