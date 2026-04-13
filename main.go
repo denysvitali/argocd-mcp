@@ -111,14 +111,29 @@ The server communicates over stdio by default.`,
 
 			// Get auth token
 			token := cfg.ArgoCD.Token
-			if token == "" && cfg.ArgoCD.Username != "" && cfg.ArgoCD.Password != "" {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
+			var refreshFn func(context.Context) (string, error)
+			if cfg.ArgoCD.Username != "" && cfg.ArgoCD.Password != "" {
+				// Capture config values for use in the refresh closure.
+				argoCDServer := cfg.ArgoCD.Server
+				argoCDUsername := cfg.ArgoCD.Username
+				argoCDPassword := cfg.ArgoCD.Password
+				argoCDAuthURL := cfg.ArgoCD.AuthURL
+				argoCDInsecure := cfg.ArgoCD.Insecure
+				argoCDPlainText := cfg.ArgoCD.PlainText
+				argoCDGRPCWeb := cfg.ArgoCD.GRPCWeb
+				argoCDGRPCWebRootPath := cfg.ArgoCD.GRPCWebRootPath
+				refreshFn = func(ctx context.Context) (string, error) {
+					return auth.GetAuthToken(ctx, logger, argoCDServer, argoCDUsername, argoCDPassword, argoCDAuthURL, argoCDInsecure, argoCDPlainText, argoCDGRPCWeb, argoCDGRPCWebRootPath)
+				}
+				if token == "" {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
 
-				var err error
-				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
-				if err != nil {
-					return fmt.Errorf("failed to get auth token: %w", err)
+					var err error
+					token, err = refreshFn(ctx)
+					if err != nil {
+						return fmt.Errorf("failed to get auth token: %w", err)
+					}
 				}
 			}
 
@@ -127,7 +142,7 @@ The server communicates over stdio by default.`,
 			}
 
 			// Create client
-			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
+			argoClient, err := client.NewClientWithRefresh(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath, refreshFn)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
@@ -499,14 +514,28 @@ Use username/password for basic authentication:
 			auth.PrintInfo(fmt.Sprintf("Connecting to ArgoCD at %s...", cfg.ArgoCD.Server))
 
 			token := cfg.ArgoCD.Token
-			if token == "" && cfg.ArgoCD.Username != "" && cfg.ArgoCD.Password != "" {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
+			var refreshFn func(context.Context) (string, error)
+			if cfg.ArgoCD.Username != "" && cfg.ArgoCD.Password != "" {
+				argoCDServer := cfg.ArgoCD.Server
+				argoCDUsername := cfg.ArgoCD.Username
+				argoCDPassword := cfg.ArgoCD.Password
+				argoCDAuthURL := cfg.ArgoCD.AuthURL
+				argoCDInsecure := cfg.ArgoCD.Insecure
+				argoCDPlainText := cfg.ArgoCD.PlainText
+				argoCDGRPCWeb := cfg.ArgoCD.GRPCWeb
+				argoCDGRPCWebRootPath := cfg.ArgoCD.GRPCWebRootPath
+				refreshFn = func(ctx context.Context) (string, error) {
+					return auth.GetAuthToken(ctx, logger, argoCDServer, argoCDUsername, argoCDPassword, argoCDAuthURL, argoCDInsecure, argoCDPlainText, argoCDGRPCWeb, argoCDGRPCWebRootPath)
+				}
+				if token == "" {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
 
-				var err error
-				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
-				if err != nil {
-					return fmt.Errorf("failed to get auth token: %w", err)
+					var err error
+					token, err = refreshFn(ctx)
+					if err != nil {
+						return fmt.Errorf("failed to get auth token: %w", err)
+					}
 				}
 			}
 
@@ -514,7 +543,7 @@ Use username/password for basic authentication:
 				return fmt.Errorf("authentication required")
 			}
 
-			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
+			argoClient, err := client.NewClientWithRefresh(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath, refreshFn)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
@@ -586,13 +615,27 @@ Examples:
 			logger.SetLevel(logLevel)
 
 			token := cfg.ArgoCD.Token
-			if token == "" && cfg.ArgoCD.Username != "" && cfg.ArgoCD.Password != "" {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
+			var refreshFn func(context.Context) (string, error)
+			if cfg.ArgoCD.Username != "" && cfg.ArgoCD.Password != "" {
+				argoCDServer := cfg.ArgoCD.Server
+				argoCDUsername := cfg.ArgoCD.Username
+				argoCDPassword := cfg.ArgoCD.Password
+				argoCDAuthURL := cfg.ArgoCD.AuthURL
+				argoCDInsecure := cfg.ArgoCD.Insecure
+				argoCDPlainText := cfg.ArgoCD.PlainText
+				argoCDGRPCWeb := cfg.ArgoCD.GRPCWeb
+				argoCDGRPCWebRootPath := cfg.ArgoCD.GRPCWebRootPath
+				refreshFn = func(ctx context.Context) (string, error) {
+					return auth.GetAuthToken(ctx, logger, argoCDServer, argoCDUsername, argoCDPassword, argoCDAuthURL, argoCDInsecure, argoCDPlainText, argoCDGRPCWeb, argoCDGRPCWebRootPath)
+				}
+				if token == "" {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
 
-				token, err = auth.GetAuthToken(ctx, logger, cfg.ArgoCD.Server, cfg.ArgoCD.Username, cfg.ArgoCD.Password, cfg.ArgoCD.AuthURL, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
-				if err != nil {
-					return fmt.Errorf("failed to get auth token: %w", err)
+					token, err = refreshFn(ctx)
+					if err != nil {
+						return fmt.Errorf("failed to get auth token: %w", err)
+					}
 				}
 			}
 
@@ -600,7 +643,7 @@ Examples:
 				return fmt.Errorf("authentication required")
 			}
 
-			argoClient, err := client.NewClient(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath)
+			argoClient, err := client.NewClientWithRefresh(logger, cfg.ArgoCD.Server, token, cfg.ArgoCD.Insecure, cfg.ArgoCD.PlainText, cfg.ArgoCD.CertFile, cfg.ArgoCD.GRPCWeb, cfg.ArgoCD.GRPCWebRootPath, refreshFn)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
@@ -627,7 +670,7 @@ Examples:
 			toolName := args[0]
 
 			// Parse arguments
-			var arguments map[string]interface{}
+			var arguments map[string]any
 			if len(args) > 1 && strings.HasPrefix(args[1], "{") {
 				// JSON argument
 				if err := json.Unmarshal([]byte(args[1]), &arguments); err != nil {
@@ -635,7 +678,7 @@ Examples:
 				}
 			} else if len(args) > 1 {
 				// Parse remaining args as key=value pairs
-				arguments = make(map[string]interface{})
+				arguments = make(map[string]any)
 				for _, arg := range args[1:] {
 					parts := splitOnce(arg, "=")
 					if len(parts) == 2 {
@@ -644,7 +687,7 @@ Examples:
 				}
 			} else if len(args) == 1 && args[0] != "-" {
 				// No arguments provided
-				arguments = make(map[string]interface{})
+				arguments = make(map[string]any)
 			}
 
 			// Check if reading from stdin
@@ -689,7 +732,7 @@ Examples:
 }
 
 // startServer starts the MCP server with the given tools
-func startServer(ctx context.Context, srv *server.MCPServer, tools []server.ServerTool, endpoint string, logger *logrus.Logger) error {
+func startServer(_ context.Context, srv *server.MCPServer, tools []server.ServerTool, endpoint string, logger *logrus.Logger) error {
 	// Add all tools to the server
 	srv.AddTools(tools...)
 
@@ -754,20 +797,18 @@ func outputResult(result *mcp.CallToolResult, format string, pretty bool) error 
 	return nil
 }
 
+type toolErrorOutput struct {
+	Error bool `json:"error"`
+	Text  any  `json:"text"`
+}
+
 // extractResultContent extracts the content from an MCP tool result
-func extractResultContent(result *mcp.CallToolResult) interface{} {
+func extractResultContent(result *mcp.CallToolResult) any {
 	if result == nil {
 		return nil
 	}
-
-	// Check if there's an error
 	if result.IsError {
-		return map[string]interface{}{
-			"error": true,
-			"text":  result.Content,
-		}
+		return toolErrorOutput{Error: true, Text: result.Content}
 	}
-
-	// Return the content as-is (it should already be parsed as interface{})
 	return result.Content
 }

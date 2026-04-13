@@ -22,11 +22,8 @@ import (
 	yaml "sigs.k8s.io/yaml"
 )
 
-// Default timeout and retry constants
-const (
-	defaultSyncTimeout = 60 * time.Second
-	defaultRetryCount  = 3
-)
+// Default timeout constant
+const defaultSyncTimeout = 60 * time.Second
 
 // Tool name constants
 const (
@@ -1932,9 +1929,7 @@ func (tm *ToolManager) handleRunResourceAction(ctx context.Context, arguments ma
 	resourceNamePtr := &resourceName
 	actionPtr := &action
 
-	// Create resource action request using deprecated type
-	//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for resource action execution
-	actionReq := &application.ResourceActionRunRequest{
+	actionReq := &application.ResourceActionRunRequestV2{
 		Name:         namePtr,
 		Group:        groupPtr,
 		Kind:         kindPtr,

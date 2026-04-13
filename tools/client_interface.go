@@ -10,6 +10,7 @@ import (
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	"github.com/denysvitali/argocd-mcp/internal/client"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // ArgoClient defines the interface for interacting with the ArgoCD API.
@@ -24,15 +25,14 @@ type ArgoClient interface {
 	SyncApplication(ctx context.Context, syncReq *application.ApplicationSyncRequest) (*v1alpha1.Application, error)
 	GetApplicationManifests(ctx context.Context, query *application.ApplicationManifestQuery) ([]string, error)
 	RollbackApplication(ctx context.Context, rollbackReq *application.ApplicationRollbackRequest) (*v1alpha1.Application, error)
-	GetApplicationEvents(ctx context.Context, query *application.ApplicationResourceEventsQuery) (interface{}, error)
+	GetApplicationEvents(ctx context.Context, query *application.ApplicationResourceEventsQuery) (*corev1.EventList, error)
 	GetApplicationLogs(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error)
 	GetManagedResources(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
 	GetResourceTree(ctx context.Context, appName string) (*v1alpha1.ApplicationTree, error)
 	ListResourceActions(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
-	//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
-	RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error //nolint:staticcheck
-	GetApplicationResource(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error)
-	PatchApplicationResource(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error)
+	RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequestV2) error
+	GetApplicationResource(ctx context.Context, query *application.ApplicationResourceRequest) (*application.ApplicationResourceResponse, error)
+	PatchApplicationResource(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (*application.ApplicationResourceResponse, error)
 	DeleteApplicationResource(ctx context.Context, deleteReq *application.ApplicationResourceDeleteRequest) error
 	TerminateOperation(ctx context.Context, req *application.OperationTerminateRequest) error
 
@@ -42,7 +42,7 @@ type ArgoClient interface {
 	CreateProject(ctx context.Context, createReq *project.ProjectCreateRequest) (*v1alpha1.AppProject, error)
 	UpdateProject(ctx context.Context, updateReq *project.ProjectUpdateRequest) (*v1alpha1.AppProject, error)
 	DeleteProject(ctx context.Context, query *project.ProjectQuery) error
-	GetProjectEvents(ctx context.Context, query *project.ProjectQuery) (interface{}, error)
+	GetProjectEvents(ctx context.Context, query *project.ProjectQuery) (*corev1.EventList, error)
 
 	// Repository methods
 	ListRepositories(ctx context.Context, query *repository.RepoQuery) (*v1alpha1.RepositoryList, error)

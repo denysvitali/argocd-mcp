@@ -11,28 +11,28 @@ import (
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/repository"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	"github.com/denysvitali/argocd-mcp/internal/client"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // MockArgoClient is a mock implementation of ArgoClient interface for testing.
 type MockArgoClient struct {
 	// Application methods
-	ListApplicationsFn        func(ctx context.Context, query *application.ApplicationQuery) (*v1alpha1.ApplicationList, error)
-	GetApplicationFn          func(ctx context.Context, query *application.ApplicationQuery) (*v1alpha1.Application, error)
-	CreateApplicationFn       func(ctx context.Context, createReq *application.ApplicationCreateRequest) (*v1alpha1.Application, error)
-	UpdateApplicationFn       func(ctx context.Context, updateReq *application.ApplicationUpdateRequest) (*v1alpha1.Application, error)
-	DeleteApplicationFn       func(ctx context.Context, deleteReq *application.ApplicationDeleteRequest) error
-	SyncApplicationFn         func(ctx context.Context, syncReq *application.ApplicationSyncRequest) (*v1alpha1.Application, error)
-	GetApplicationManifestsFn func(ctx context.Context, query *application.ApplicationManifestQuery) ([]string, error)
-	RollbackApplicationFn     func(ctx context.Context, rollbackReq *application.ApplicationRollbackRequest) (*v1alpha1.Application, error)
-	GetApplicationEventsFn    func(ctx context.Context, query *application.ApplicationResourceEventsQuery) (interface{}, error)
-	GetApplicationLogsFn      func(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error)
-	GetManagedResourcesFn     func(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
-	GetResourceTreeFn         func(ctx context.Context, appName string) (*v1alpha1.ApplicationTree, error)
-	ListResourceActionsFn     func(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
-	//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
-	RunResourceActionFn         func(ctx context.Context, actionReq *application.ResourceActionRunRequest) error
-	GetApplicationResourceFn    func(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error)
-	PatchApplicationResourceFn  func(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error)
+	ListApplicationsFn          func(ctx context.Context, query *application.ApplicationQuery) (*v1alpha1.ApplicationList, error)
+	GetApplicationFn            func(ctx context.Context, query *application.ApplicationQuery) (*v1alpha1.Application, error)
+	CreateApplicationFn         func(ctx context.Context, createReq *application.ApplicationCreateRequest) (*v1alpha1.Application, error)
+	UpdateApplicationFn         func(ctx context.Context, updateReq *application.ApplicationUpdateRequest) (*v1alpha1.Application, error)
+	DeleteApplicationFn         func(ctx context.Context, deleteReq *application.ApplicationDeleteRequest) error
+	SyncApplicationFn           func(ctx context.Context, syncReq *application.ApplicationSyncRequest) (*v1alpha1.Application, error)
+	GetApplicationManifestsFn   func(ctx context.Context, query *application.ApplicationManifestQuery) ([]string, error)
+	RollbackApplicationFn       func(ctx context.Context, rollbackReq *application.ApplicationRollbackRequest) (*v1alpha1.Application, error)
+	GetApplicationEventsFn      func(ctx context.Context, query *application.ApplicationResourceEventsQuery) (*corev1.EventList, error)
+	GetApplicationLogsFn        func(ctx context.Context, query *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error)
+	GetManagedResourcesFn       func(ctx context.Context, appName string) ([]*v1alpha1.ResourceDiff, error)
+	GetResourceTreeFn           func(ctx context.Context, appName string) (*v1alpha1.ApplicationTree, error)
+	ListResourceActionsFn       func(ctx context.Context, query *application.ApplicationResourceRequest) ([]*v1alpha1.ResourceAction, error)
+	RunResourceActionFn         func(ctx context.Context, actionReq *application.ResourceActionRunRequestV2) error
+	GetApplicationResourceFn    func(ctx context.Context, query *application.ApplicationResourceRequest) (*application.ApplicationResourceResponse, error)
+	PatchApplicationResourceFn  func(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (*application.ApplicationResourceResponse, error)
 	DeleteApplicationResourceFn func(ctx context.Context, deleteReq *application.ApplicationResourceDeleteRequest) error
 	TerminateOperationFn        func(ctx context.Context, req *application.OperationTerminateRequest) error
 
@@ -42,7 +42,7 @@ type MockArgoClient struct {
 	CreateProjectFn    func(ctx context.Context, createReq *project.ProjectCreateRequest) (*v1alpha1.AppProject, error)
 	UpdateProjectFn    func(ctx context.Context, updateReq *project.ProjectUpdateRequest) (*v1alpha1.AppProject, error)
 	DeleteProjectFn    func(ctx context.Context, query *project.ProjectQuery) error
-	GetProjectEventsFn func(ctx context.Context, query *project.ProjectQuery) (interface{}, error)
+	GetProjectEventsFn func(ctx context.Context, query *project.ProjectQuery) (*corev1.EventList, error)
 
 	// Repository methods
 	ListRepositoriesFn         func(ctx context.Context, query *repository.RepoQuery) (*v1alpha1.RepositoryList, error)
@@ -188,7 +188,7 @@ func (m *MockArgoClient) RollbackApplication(ctx context.Context, rollbackReq *a
 	return nil, fmt.Errorf("RollbackApplication not mocked")
 }
 
-func (m *MockArgoClient) GetApplicationEvents(ctx context.Context, query *application.ApplicationResourceEventsQuery) (interface{}, error) {
+func (m *MockArgoClient) GetApplicationEvents(ctx context.Context, query *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 	m.GetApplicationEventsCalls = append(m.GetApplicationEventsCalls, &MockCall{Args: query})
 	if m.GetApplicationEventsFn != nil {
 		return m.GetApplicationEventsFn(ctx, query)
@@ -228,8 +228,7 @@ func (m *MockArgoClient) ListResourceActions(ctx context.Context, query *applica
 	return nil, fmt.Errorf("ListResourceActions not mocked")
 }
 
-//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
-func (m *MockArgoClient) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequest) error { //nolint:staticcheck
+func (m *MockArgoClient) RunResourceAction(ctx context.Context, actionReq *application.ResourceActionRunRequestV2) error {
 	m.RunResourceActionCalls = append(m.RunResourceActionCalls, &MockCall{Args: actionReq})
 	if m.RunResourceActionFn != nil {
 		return m.RunResourceActionFn(ctx, actionReq)
@@ -237,7 +236,7 @@ func (m *MockArgoClient) RunResourceAction(ctx context.Context, actionReq *appli
 	return fmt.Errorf("RunResourceAction not mocked")
 }
 
-func (m *MockArgoClient) GetApplicationResource(ctx context.Context, query *application.ApplicationResourceRequest) (interface{}, error) {
+func (m *MockArgoClient) GetApplicationResource(ctx context.Context, query *application.ApplicationResourceRequest) (*application.ApplicationResourceResponse, error) {
 	m.GetApplicationResourceCalls = append(m.GetApplicationResourceCalls, &MockCall{Args: query})
 	if m.GetApplicationResourceFn != nil {
 		return m.GetApplicationResourceFn(ctx, query)
@@ -245,7 +244,7 @@ func (m *MockArgoClient) GetApplicationResource(ctx context.Context, query *appl
 	return nil, fmt.Errorf("GetApplicationResource not mocked")
 }
 
-func (m *MockArgoClient) PatchApplicationResource(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (interface{}, error) {
+func (m *MockArgoClient) PatchApplicationResource(ctx context.Context, patchReq *application.ApplicationResourcePatchRequest) (*application.ApplicationResourceResponse, error) {
 	m.PatchApplicationResourceCalls = append(m.PatchApplicationResourceCalls, &MockCall{Args: patchReq})
 	if m.PatchApplicationResourceFn != nil {
 		return m.PatchApplicationResourceFn(ctx, patchReq)
@@ -311,7 +310,7 @@ func (m *MockArgoClient) DeleteProject(ctx context.Context, query *project.Proje
 	return fmt.Errorf("DeleteProject not mocked")
 }
 
-func (m *MockArgoClient) GetProjectEvents(ctx context.Context, query *project.ProjectQuery) (interface{}, error) {
+func (m *MockArgoClient) GetProjectEvents(ctx context.Context, query *project.ProjectQuery) (*corev1.EventList, error) {
 	m.GetProjectEventsCalls = append(m.GetProjectEventsCalls, &MockCall{Args: query})
 	if m.GetProjectEventsFn != nil {
 		return m.GetProjectEventsFn(ctx, query)

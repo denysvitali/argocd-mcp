@@ -16,6 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	yaml "sigs.k8s.io/yaml"
 )
@@ -577,17 +578,17 @@ func TestHandleGetApplicationDiff(t *testing.T) {
 func TestHandleGetApplicationEvents(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mock := &MockArgoClient{
-			GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
-				return map[string]interface{}{
-					"items": []map[string]interface{}{
+			GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
+				return &corev1.EventList{
+					Items: []corev1.Event{
 						{
-							"type":    "Normal",
-							"reason":  "Synced",
-							"message": "Application synced successfully",
-							"involvedObject": map[string]interface{}{
-								"name":      "myapp",
-								"namespace": "default",
-								"kind":      "Application",
+							Type:    "Normal",
+							Reason:  "Synced",
+							Message: "Application synced successfully",
+							InvolvedObject: corev1.ObjectReference{
+								Name:      "myapp",
+								Namespace: "default",
+								Kind:      "Application",
 							},
 						},
 					},
@@ -606,25 +607,25 @@ func TestHandleGetApplicationEvents(t *testing.T) {
 
 	t.Run("with resource filter", func(t *testing.T) {
 		mock := &MockArgoClient{
-			GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
-				return map[string]interface{}{
-					"items": []map[string]interface{}{
+			GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
+				return &corev1.EventList{
+					Items: []corev1.Event{
 						{
-							"type":    "Normal",
-							"reason":  "Synced",
-							"message": "msg1",
-							"involvedObject": map[string]interface{}{
-								"name": "deploy1",
-								"kind": "Deployment",
+							Type:    "Normal",
+							Reason:  "Synced",
+							Message: "msg1",
+							InvolvedObject: corev1.ObjectReference{
+								Name: "deploy1",
+								Kind: "Deployment",
 							},
 						},
 						{
-							"type":    "Warning",
-							"reason":  "Failed",
-							"message": "msg2",
-							"involvedObject": map[string]interface{}{
-								"name": "deploy2",
-								"kind": "Deployment",
+							Type:    "Warning",
+							Reason:  "Failed",
+							Message: "msg2",
+							InvolvedObject: corev1.ObjectReference{
+								Name: "deploy2",
+								Kind: "Deployment",
 							},
 						},
 					},
@@ -645,7 +646,7 @@ func TestHandleGetApplicationEvents(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		mock := &MockArgoClient{
-			GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
+			GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 				return nil, fmt.Errorf("connection error")
 			},
 		}
@@ -735,8 +736,7 @@ func TestHandleListResourceActions(t *testing.T) {
 func TestHandleRunResourceAction(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mock := &MockArgoClient{
-			//lint:ignore SA1019 ResourceActionRunRequest is deprecated but required for the API
-			RunResourceActionFn: func(_ context.Context, _ *application.ResourceActionRunRequest) error {
+			RunResourceActionFn: func(_ context.Context, _ *application.ResourceActionRunRequestV2) error {
 				return nil
 			},
 		}
@@ -770,12 +770,8 @@ func TestHandleRunResourceAction(t *testing.T) {
 func TestHandleGetApplicationResource(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mock := &MockArgoClient{
-			GetApplicationResourceFn: func(_ context.Context, _ *application.ApplicationResourceRequest) (interface{}, error) {
-				return map[string]interface{}{
-					"apiVersion": "apps/v1",
-					"kind":       "Deployment",
-					"metadata":   map[string]interface{}{"name": "my-deploy"},
-				}, nil
+			GetApplicationResourceFn: func(_ context.Context, _ *application.ApplicationResourceRequest) (*application.ApplicationResourceResponse, error) {
+				return &application.ApplicationResourceResponse{}, nil
 			},
 		}
 		tm := testToolManager(mock, false, false)
@@ -792,8 +788,8 @@ func TestHandleGetApplicationResource(t *testing.T) {
 func TestHandlePatchApplicationResource(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mock := &MockArgoClient{
-			PatchApplicationResourceFn: func(_ context.Context, _ *application.ApplicationResourcePatchRequest) (interface{}, error) {
-				return map[string]interface{}{"patched": true}, nil
+			PatchApplicationResourceFn: func(_ context.Context, _ *application.ApplicationResourcePatchRequest) (*application.ApplicationResourceResponse, error) {
+				return &application.ApplicationResourceResponse{}, nil
 			},
 		}
 		tm := testToolManager(mock, false, false)
@@ -1028,9 +1024,11 @@ func TestHandleDeleteProject(t *testing.T) {
 func TestHandleGetProjectEvents(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mock := &MockArgoClient{
-			GetProjectEventsFn: func(_ context.Context, _ *project.ProjectQuery) (interface{}, error) {
-				return []map[string]interface{}{
-					{"type": "Normal", "reason": "Created", "message": "Project created"},
+			GetProjectEventsFn: func(_ context.Context, _ *project.ProjectQuery) (*corev1.EventList, error) {
+				return &corev1.EventList{
+					Items: []corev1.Event{
+						{Type: "Normal", Reason: "Created", Message: "Project created"},
+					},
 				}, nil
 			},
 		}

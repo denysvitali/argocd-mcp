@@ -11,6 +11,7 @@ import (
 	"github.com/denysvitali/argocd-mcp/internal/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	yaml "sigs.k8s.io/yaml"
 )
@@ -63,32 +64,26 @@ func makeOutOfSyncApp(name string) *v1alpha1.Application {
 	}
 }
 
-// emptyEventListJSON returns a raw events interface{} with no items.
-func emptyEventListJSON() interface{} {
-	type eventList struct {
-		Items []interface{} `json:"items"`
-	}
-	return eventList{Items: []interface{}{}}
+// emptyEventListJSON returns an empty EventList for testing.
+func emptyEventListJSON() *corev1.EventList {
+	return &corev1.EventList{}
 }
 
-// warningEventListJSON returns a raw events interface{} containing one Warning event.
-func warningEventListJSON(reason, message, kind, resName string) interface{} {
-	data, _ := json.Marshal(map[string]interface{}{
-		"items": []interface{}{
-			map[string]interface{}{
-				"type":    "Warning",
-				"reason":  reason,
-				"message": message,
-				"involvedObject": map[string]interface{}{
-					"kind": kind,
-					"name": resName,
+// warningEventListJSON returns an EventList containing one Warning event.
+func warningEventListJSON(reason, message, kind, resName string) *corev1.EventList {
+	return &corev1.EventList{
+		Items: []corev1.Event{
+			{
+				Type:    "Warning",
+				Reason:  reason,
+				Message: message,
+				InvolvedObject: corev1.ObjectReference{
+					Kind: kind,
+					Name: resName,
 				},
 			},
 		},
-	})
-	var result interface{}
-	_ = json.Unmarshal(data, &result)
-	return result
+	}
 }
 
 func newTestLogger() *logrus.Logger {
@@ -123,7 +118,7 @@ func TestDiagnoseApplication_HealthyApp(t *testing.T) {
 		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
 			return &v1alpha1.ApplicationTree{}, nil
 		},
-		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
+		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 			return emptyEventListJSON(), nil
 		},
 	}
@@ -169,7 +164,7 @@ func TestDiagnoseApplication_DegradedApp(t *testing.T) {
 		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
 			return &v1alpha1.ApplicationTree{}, nil
 		},
-		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
+		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 			return emptyEventListJSON(), nil
 		},
 	}
@@ -233,7 +228,7 @@ func TestDiagnoseApplication_OutOfSyncResources(t *testing.T) {
 		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
 			return &v1alpha1.ApplicationTree{}, nil
 		},
-		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
+		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 			return emptyEventListJSON(), nil
 		},
 	}
@@ -279,7 +274,7 @@ func TestDiagnoseApplication_WarningEvents(t *testing.T) {
 		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
 			return &v1alpha1.ApplicationTree{}, nil
 		},
-		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
+		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 			return warningEventListJSON("BackOff", "Back-off restarting failed container", "Pod", "web-abc123"), nil
 		},
 	}
@@ -320,7 +315,7 @@ func TestDiagnoseApplication_DataSources(t *testing.T) {
 		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
 			return &v1alpha1.ApplicationTree{}, nil
 		},
-		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
+		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 			return emptyEventListJSON(), nil
 		},
 	}
@@ -361,7 +356,7 @@ func TestDiagnoseApplication_NextActions(t *testing.T) {
 		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
 			return &v1alpha1.ApplicationTree{}, nil
 		},
-		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
+		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 			return emptyEventListJSON(), nil
 		},
 	}
@@ -609,7 +604,7 @@ func TestDiagnoseApplication_PreviousLogsSignal(t *testing.T) {
 		},
 		GetManagedResourcesFn: func(_ context.Context, _ string) ([]*v1alpha1.ResourceDiff, error) { return nil, nil },
 		GetResourceTreeFn:     func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) { return tree, nil },
-		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
+		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 			return emptyEventListJSON(), nil
 		},
 		GetApplicationLogsFn: func(_ context.Context, q *application.ApplicationPodLogsQuery) ([]client.ApplicationLogEntry, error) {
@@ -675,7 +670,7 @@ func TestDiagnoseApplication_CategoryField(t *testing.T) {
 		GetResourceTreeFn: func(_ context.Context, _ string) (*v1alpha1.ApplicationTree, error) {
 			return &v1alpha1.ApplicationTree{}, nil
 		},
-		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (interface{}, error) {
+		GetApplicationEventsFn: func(_ context.Context, _ *application.ApplicationResourceEventsQuery) (*corev1.EventList, error) {
 			return emptyEventListJSON(), nil
 		},
 	}
