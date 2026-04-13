@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/argocd-mcp/argocd-mcp/internal/client"
+	"github.com/denysvitali/argocd-mcp/internal/client"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/cluster"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/project"

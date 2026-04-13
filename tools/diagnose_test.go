@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/argocd-mcp/argocd-mcp/internal/client"
+	"github.com/denysvitali/argocd-mcp/internal/client"
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	healthlib "github.com/argoproj/gitops-engine/pkg/health"
