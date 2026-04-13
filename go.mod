@@ -1,4 +1,4 @@
-module github.com/argocd-mcp/argocd-mcp
+module github.com/denysvitali/argocd-mcp
 
 go 1.25.5
 
