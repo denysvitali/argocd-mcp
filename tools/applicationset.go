@@ -415,7 +415,7 @@ func formatApplicationSetDetail(as *v1alpha1.ApplicationSet) ApplicationSetDetai
 	for _, s := range as.Status.ApplicationStatus {
 		appStatuses = append(appStatuses, ApplicationSetAppStatusSummary{
 			Application: s.Application,
-			Status:      s.Status,
+			Status:      string(s.Status),
 			Step:        s.Step,
 			Message:     s.Message,
 		})
