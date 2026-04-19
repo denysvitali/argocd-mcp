@@ -17,7 +17,6 @@ import (
 	"github.com/denysvitali/argocd-mcp/internal/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	yaml "sigs.k8s.io/yaml"
@@ -38,8 +37,7 @@ const (
 	toolRollbackApplication    = "rollback_application"
 	toolRefreshApplication     = "refresh_application"
 	toolGetApplicationManifest = "get_application_manifests"
-	toolGetApplicationDiff         = "get_application_diff"
-		toolGetApplicationRevisionDiff = "get_application_revision_diff"
+	toolGetApplicationDiff     = "get_application_diff"
 	toolGetApplicationEvents   = "get_application_events"
 	toolGetLogs                = "get_logs"
 	toolGetResourceTree        = "get_resource_tree"
@@ -347,33 +345,6 @@ func (tm *ToolManager) defineTools() {
 					},
 				},
 				Required: []string{"name"},
-			},
-
-		},
-		{
-			Name:        "get_application_revision_diff",
-			Description: "Compare application manifests between two Git revisions. Shows resources added, removed, and modified between revision_a and revision_b.",
-			InputSchema: mcp.ToolInputSchema{
-				Type: "object",
-				Properties: map[string]interface{}{
-					"name": map[string]interface{}{
-						"type":        "string",
-						"description": "Application name (required)",
-					},
-					"revision_a": map[string]interface{}{
-						"type":        "string",
-						"description": "First revision (base) - e.g. HEAD, a commit SHA, or a tag (required)",
-					},
-					"revision_b": map[string]interface{}{
-						"type":        "string",
-						"description": "Second revision (target) to compare against revision_a (required)",
-					},
-					"source_index": map[string]interface{}{
-						"type":        "integer",
-						"description": "Source index for multi-source applications (optional, default: all sources)",
-					},
-				},
-				Required: []string{"name", "revision_a", "revision_b"},
 			},
 		},
 		{
@@ -1250,8 +1221,6 @@ func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
 			return tm.handleGetApplicationManifests(ctx, arguments)
 		case toolGetApplicationDiff:
 			return tm.handleGetApplicationDiff(ctx, arguments)
-		case toolGetApplicationRevisionDiff:
-			return tm.handleGetApplicationRevisionDiff(ctx, arguments)
 		case toolGetApplicationEvents:
 			return tm.handleGetApplicationEvents(ctx, arguments)
 		case toolListResourceActions:
@@ -1705,214 +1674,6 @@ func jsonToYaml(jsonStr string) string {
 		return jsonStr
 	}
 	return string(yamlBytes)
-}
-
-// resourceKey uniquely identifies a Kubernetes resource within a manifest set.
-type resourceKey struct {
-	Group     string
-	Kind      string
-	Namespace string
-	Name      string
-}
-
-// buildResourceMap parses a slice of JSON manifest strings into a map keyed by resource identity.
-func buildResourceMap(manifests []string) map[resourceKey]string {
-	result := make(map[resourceKey]string)
-	for _, m := range manifests {
-		var obj map[string]interface{}
-		if err := json.Unmarshal([]byte(m), &obj); err != nil {
-			continue
-		}
-
-		key := extractResourceKey(obj)
-		if key.Name == "" {
-			continue
-		}
-
-		if metadata, ok := obj["metadata"].(map[string]interface{}); ok {
-			delete(metadata, "managedFields")
-			delete(metadata, "creationTimestamp")
-			delete(metadata, "generation")
-			delete(metadata, "resourceVersion")
-			delete(metadata, "uid")
-		}
-
-		yamlBytes, err := yaml.Marshal(obj)
-		if err != nil {
-			continue
-		}
-		result[key] = string(yamlBytes)
-	}
-	return result
-}
-
-// extractResourceKey extracts a resourceKey from a parsed manifest object.
-func extractResourceKey(obj map[string]interface{}) resourceKey {
-	key := resourceKey{}
-	if apiVersion, ok := obj["apiVersion"].(string); ok {
-		parts := strings.SplitN(apiVersion, "/", 2)
-		if len(parts) == 2 {
-			key.Group = parts[0]
-		}
-	}
-	if kind, ok := obj["kind"].(string); ok {
-		key.Kind = kind
-	}
-	if metadata, ok := obj["metadata"].(map[string]interface{}); ok {
-		if name, ok := metadata["name"].(string); ok {
-			key.Name = name
-		}
-		if ns, ok := metadata["namespace"].(string); ok {
-			key.Namespace = ns
-		}
-	}
-	return key
-}
-
-// revisionDiffResource represents a single resource diff result.
-type revisionDiffResource struct {
-	Status    string `json:"status" yaml:"status"`
-	Group     string `json:"group" yaml:"group"`
-	Kind      string `json:"kind" yaml:"kind"`
-	Namespace string `json:"namespace" yaml:"namespace"`
-	Name      string `json:"name" yaml:"name"`
-	Diff      string `json:"diff,omitempty" yaml:"diff,omitempty"`
-}
-
-// revisionDiffResult is the top-level result structure.
-type revisionDiffResult struct {
-	Application string                 `json:"application" yaml:"application"`
-	RevisionA   string                 `json:"revision_a" yaml:"revision_a"`
-	RevisionB   string                 `json:"revision_b" yaml:"revision_b"`
-	Resources   []revisionDiffResource `json:"resources" yaml:"resources"`
-	Summary     map[string]int         `json:"summary" yaml:"summary"`
-	Limited     bool                   `json:"limited" yaml:"limited"`
-}
-
-func computeRevisionDiff(resourcesA, resourcesB map[resourceKey]string, revA, revB string, appName string) revisionDiffResult {
-	result := revisionDiffResult{
-		Application: appName,
-		RevisionA:   revA,
-		RevisionB:   revB,
-		Summary:     map[string]int{"added": 0, "removed": 0, "modified": 0, "unchanged": 0},
-	}
-
-	allKeys := make(map[resourceKey]bool)
-	for k := range resourcesA {
-		allKeys[k] = true
-	}
-	for k := range resourcesB {
-		allKeys[k] = true
-	}
-
-	diffResources := make([]revisionDiffResource, 0)
-	dmp := diffmatchpatch.New()
-
-	for key := range allKeys {
-		yamlA, inA := resourcesA[key]
-		yamlB, inB := resourcesB[key]
-
-		dr := revisionDiffResource{
-			Group:     key.Group,
-			Kind:      key.Kind,
-			Namespace: key.Namespace,
-			Name:      key.Name,
-		}
-
-		switch {
-		case !inA && inB:
-			dr.Status = "added"
-			dr.Diff = "+ (entire resource added)"
-			result.Summary["added"]++
-		case inA && !inB:
-			dr.Status = "removed"
-			dr.Diff = "- (entire resource removed)"
-			result.Summary["removed"]++
-		case yamlA == yamlB:
-			result.Summary["unchanged"]++
-			continue
-		default:
-			dr.Status = "modified"
-			diffs := dmp.DiffMain(yamlA, yamlB, true)
-			diffs = dmp.DiffCleanupSemantic(diffs)
-			var sb strings.Builder
-			for _, d := range diffs {
-				switch d.Type {
-				case diffmatchpatch.DiffInsert:
-					sb.WriteString("+")
-					sb.WriteString(d.Text)
-				case diffmatchpatch.DiffDelete:
-					sb.WriteString("-")
-					sb.WriteString(d.Text)
-				case diffmatchpatch.DiffEqual:
-					sb.WriteString(" ")
-					sb.WriteString(d.Text)
-				}
-			}
-			dr.Diff = truncateString(sb.String(), MaxResponseSizeChars/2)
-			result.Summary["modified"]++
-		}
-
-		diffResources = append(diffResources, dr)
-
-		if len(diffResources) >= MaxDiffResources {
-			result.Limited = true
-			break
-		}
-	}
-
-	result.Resources = diffResources
-	return result
-}
-
-func (tm *ToolManager) handleGetApplicationRevisionDiff(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	name := String(arguments, "name", "")
-	revisionA := String(arguments, "revision_a", "")
-	revisionB := String(arguments, "revision_b", "")
-	sourceIndex := Int(arguments, "source_index", -1)
-
-	if name == "" {
-		return errorResult("application name is required"), nil
-	}
-	if revisionA == "" {
-		return errorResult("revision_a is required"), nil
-	}
-	if revisionB == "" {
-		return errorResult("revision_b is required"), nil
-	}
-
-	queryA := &application.ApplicationManifestQuery{
-		Name:     &name,
-		Revision: &revisionA,
-	}
-	if sourceIndex >= 0 {
-		queryA.SourcePositions = []int64{int64(sourceIndex)}
-	}
-
-	manifestsA, err := tm.client.GetApplicationManifests(ctx, queryA)
-	if err != nil {
-		return errorResult(fmt.Sprintf("failed to get manifests for revision %q: %v", revisionA, err)), nil
-	}
-
-	queryB := &application.ApplicationManifestQuery{
-		Name:     &name,
-		Revision: &revisionB,
-	}
-	if sourceIndex >= 0 {
-		queryB.SourcePositions = []int64{int64(sourceIndex)}
-	}
-
-	manifestsB, err := tm.client.GetApplicationManifests(ctx, queryB)
-	if err != nil {
-		return errorResult(fmt.Sprintf("failed to get manifests for revision %q: %v", revisionB, err)), nil
-	}
-
-	resourcesA := buildResourceMap(manifestsA)
-	resourcesB := buildResourceMap(manifestsB)
-
-	result := computeRevisionDiff(resourcesA, resourcesB, revisionA, revisionB, name)
-
-	return Result(result, nil)
 }
 
 func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
