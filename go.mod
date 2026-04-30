@@ -13,10 +13,10 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/time v0.14.0
 	google.golang.org/protobuf v1.36.11
-	k8s.io/api v0.34.0
-	k8s.io/apimachinery v0.34.0
-	k8s.io/client-go v0.34.0
-	k8s.io/metrics v0.34.0
+	k8s.io/api v0.36.0
+	k8s.io/apimachinery v0.36.0
+	k8s.io/client-go v0.36.0
+	k8s.io/metrics v0.36.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
