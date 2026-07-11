@@ -111,6 +111,17 @@ func TestDecodeArgs(t *testing.T) {
 	}
 }
 
+func TestBoolDefault(t *testing.T) {
+	truthy := true
+	falsy := false
+	if !boolDefault(nil, true) || boolDefault(nil, false) {
+		t.Error("nil should return the default")
+	}
+	if !boolDefault(&truthy, false) || boolDefault(&falsy, true) {
+		t.Error("non-nil should return the pointed value")
+	}
+}
+
 func TestDecodeArgsTypeMismatch(t *testing.T) {
 	_, err := decodeArgs[testArgs](map[string]interface{}{"limit": "not-a-number"})
 	if err == nil {
