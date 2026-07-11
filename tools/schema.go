@@ -99,6 +99,16 @@ func propertyFor(t reflect.Type) *propertySchema {
 	}
 }
 
+// boolDefault dereferences an optional boolean argument, falling back to the
+// given default when the argument was omitted. Used for booleans whose
+// default is true (a plain bool cannot distinguish "absent" from "false").
+func boolDefault(v *bool, def bool) bool {
+	if v == nil {
+		return def
+	}
+	return *v
+}
+
 // jsonFieldName extracts the argument name from the json tag.
 func jsonFieldName(field reflect.StructField) string {
 	tag := field.Tag.Get("json")
