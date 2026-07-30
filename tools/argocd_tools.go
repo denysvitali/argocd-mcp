@@ -120,12 +120,21 @@ var deleteTools = map[string]bool{
 
 // ToolManager manages the MCP tools for ArgoCD
 type ToolManager struct {
-	client       ArgoClient
-	kubeMetrics  KubeMetricsClient
-	logger       *logrus.Logger
-	tools        []mcp.Tool
-	safeMode     bool
-	allowDeletes bool
+	client           ArgoClient
+	kubeMetrics      KubeMetricsClient
+	logger           *logrus.Logger
+	tools            []mcp.Tool
+	safeMode         bool
+	allowDeletes     bool
+	structuredOutput bool
+}
+
+// SetStructuredOutput controls whether tool results also carry their
+// payload as CallToolResult.StructuredContent. Off by default: it repeats
+// the entire payload on the wire, and only clients that actually read
+// structured content benefit. See attachStructuredContent.
+func (tm *ToolManager) SetStructuredOutput(enabled bool) {
+	tm.structuredOutput = enabled
 }
 
 // NewToolManager creates a new tool manager

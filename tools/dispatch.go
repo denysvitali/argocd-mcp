@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	yaml "sigs.k8s.io/yaml"
 )
 
 // handlerFunc is the signature shared by all tool handlers.
@@ -98,6 +99,47 @@ func (tm *ToolManager) getToolHandler(name string) mcp.ToolHandler {
 		ctx, cancel := context.WithTimeout(ctx, defaultSyncTimeout)
 		defer cancel()
 
-		return handler(ctx, arguments)
+		result, err := handler(ctx, arguments)
+		if err != nil {
+			return nil, err
+		}
+		if tm.structuredOutput {
+			attachStructuredContent(result)
+		}
+		return result, nil
 	}
+}
+
+// attachStructuredContent mirrors a result's YAML text payload into
+// CallToolResult.StructuredContent, so clients on the official SDK can
+// consume tool output as JSON instead of re-parsing YAML out of a string.
+//
+// This is opt-in (see ToolManager.structuredOutput) because it repeats the
+// whole payload on the wire, and most clients today render only the text
+// content — for them the copy is pure context cost, which is exactly what
+// the truncation limits in helpers.go exist to control.
+//
+// Only object-shaped payloads are mirrored: per the MCP spec a tool's
+// structured content is validated against its output schema, and every
+// payload we produce that is worth addressing by field is an object.
+func attachStructuredContent(result *mcp.CallToolResult) {
+	if result == nil || result.IsError || result.StructuredContent != nil {
+		return
+	}
+	if len(result.Content) != 1 {
+		return
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok {
+		return
+	}
+
+	var structured map[string]interface{}
+	if err := yaml.Unmarshal([]byte(text.Text), &structured); err != nil {
+		return
+	}
+	if structured == nil {
+		return
+	}
+	result.StructuredContent = structured
 }

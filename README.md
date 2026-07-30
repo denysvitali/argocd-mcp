@@ -76,6 +76,21 @@ export ARGOCD_MCP_ARGOCD_TOKEN="your-token"
 deprecated by the MCP spec in favour of streamable HTTP, which serves SSE
 responses itself.
 
+### Structured output
+
+By default tool results are returned as YAML text. With
+`--structured-output` (or `server.structured_output: true`) each result
+*also* carries the same payload as JSON in the MCP `structuredContent`
+field, so clients can consume it without re-parsing YAML out of a string:
+
+```bash
+./argocd-mcp serve --structured-output
+```
+
+It is off by default on purpose: the payload is sent twice, and most
+clients today render only the text content — for them the copy is pure
+context cost. Turn it on if your client actually reads structured content.
+
 > The HTTP transport has no authentication of its own — anything that can
 > reach the port can drive your ArgoCD. Keep it bound to localhost, or put
 > it behind an authenticating proxy.

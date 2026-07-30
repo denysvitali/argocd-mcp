@@ -157,6 +157,14 @@ The server communicates over stdio by default.`,
 
 			// Create tool manager
 			toolManager := tools.NewToolManager(argoClient, logger, cfg.Server.SafeMode, cfg.Server.AllowDeletes)
+			structuredOutput := cfg.Server.StructuredOutput
+			if cmd.Flags().Changed("structured-output") {
+				structuredOutput, _ = cmd.Flags().GetBool("structured-output")
+			}
+			toolManager.SetStructuredOutput(structuredOutput)
+			if structuredOutput {
+				logger.Info("Structured output enabled: results also carry JSON structuredContent")
+			}
 			serverTools := toolManager.GetServerTools()
 
 			// Create context that cancels on interrupt
@@ -194,6 +202,7 @@ The server communicates over stdio by default.`,
 	serveCmd.Flags().Bool("allow-deletes", false, "Enable delete operations (requires --read-write; deletes are always gated separately)")
 	serveCmd.Flags().String("mcp-endpoint", "", "Transport to serve on: stdio (default) or http")
 	serveCmd.Flags().String("listen", "127.0.0.1:8000", "Address to listen on when --mcp-endpoint=http")
+	serveCmd.Flags().Bool("structured-output", false, "Also return each tool result as JSON in structuredContent (duplicates the payload; only useful for clients that read it)")
 
 	// Config command group. Cobra derives a command's name from the first
 	// word of Use, so registering "config init" and "config show" as
@@ -343,6 +352,7 @@ Or run interactively without flags:
 				fmt.Printf("gRPC-Web Root Path: %s\n", cfg.ArgoCD.GRPCWebRootPath)
 			}
 			fmt.Printf("MCP Endpoint: %s\n", cfg.Server.MCPEndpoint)
+			fmt.Printf("Structured Output: %t\n", cfg.Server.StructuredOutput)
 			switch {
 			case cfg.Server.SafeMode:
 				fmt.Printf("Mode: read-only (all writes disabled)\n")

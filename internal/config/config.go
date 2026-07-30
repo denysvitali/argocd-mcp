@@ -35,6 +35,10 @@ type ServerConfig struct {
 	MCPEndpoint  string `mapstructure:"mcp_endpoint"`
 	SafeMode     bool   `mapstructure:"safe_mode"`
 	AllowDeletes bool   `mapstructure:"allow_deletes"`
+	// StructuredOutput additionally returns each tool result as JSON in
+	// CallToolResult.StructuredContent. Off by default: it duplicates the
+	// payload, and only clients that read structured content benefit.
+	StructuredOutput bool `mapstructure:"structured_output"`
 }
 
 type LoggingConfig struct {
@@ -56,6 +60,7 @@ func LoadConfig(logger *logrus.Logger, configPath string) (*Config, error) {
 	v.SetDefault("server.mcp_endpoint", "stdio")
 	v.SetDefault("server.safe_mode", true)
 	v.SetDefault("server.allow_deletes", false)
+	v.SetDefault("server.structured_output", false)
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.format", "json")
 

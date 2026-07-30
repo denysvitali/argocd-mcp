@@ -38,8 +38,13 @@ server:
   # - list_repositories, get_repository, validate_repository
   # - list_clusters, get_cluster
   # Sync operations are allowed but prune is disabled
-  # (default: false)
-  # safe_mode: false
+  # (default: true — set to false, or pass --read-write, to enable writes)
+  # safe_mode: true
+
+  # Also return each tool result as JSON in the MCP structuredContent
+  # field, in addition to the YAML text content. Off by default: it sends
+  # the payload twice, which only helps clients that actually read it.
+  # structured_output: false
 
 # Logging Configuration
 logging:
