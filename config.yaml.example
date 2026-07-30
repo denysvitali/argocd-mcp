@@ -26,7 +26,9 @@ argocd:
 
 # Server Configuration
 server:
-  # MCP endpoint type: stdio or sse (default: stdio)
+  # MCP transport: stdio or http (default: stdio).
+  # "http" serves the streamable HTTP transport; use --listen to pick the
+  # address. "sse" is accepted as a deprecated alias for "http".
   mcp_endpoint: "stdio"
 
   # Safe mode - restricts write operations for security

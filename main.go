@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -176,7 +178,12 @@ The server communicates over stdio by default.`,
 				Name:    "argocd-mcp",
 				Version: version,
 			}, nil)
-			return startServer(ctx, mcpSrv, serverTools, cfg.Server.MCPEndpoint, logger)
+			listen, _ := cmd.Flags().GetString("listen")
+			endpoint := cfg.Server.MCPEndpoint
+			if flagEndpoint, _ := cmd.Flags().GetString("mcp-endpoint"); flagEndpoint != "" {
+				endpoint = flagEndpoint
+			}
+			return startServer(ctx, mcpSrv, serverTools, endpoint, listen, logger)
 		},
 	}
 
@@ -185,6 +192,8 @@ The server communicates over stdio by default.`,
 	serveCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests (e.g., /argo-cd)")
 	serveCmd.Flags().Bool("read-write", false, "Enable write operations (overrides read-only default and config file)")
 	serveCmd.Flags().Bool("allow-deletes", false, "Enable delete operations (requires --read-write; deletes are always gated separately)")
+	serveCmd.Flags().String("mcp-endpoint", "", "Transport to serve on: stdio (default) or http")
+	serveCmd.Flags().String("listen", "127.0.0.1:8000", "Address to listen on when --mcp-endpoint=http")
 
 	// Config command group. Cobra derives a command's name from the first
 	// word of Use, so registering "config init" and "config show" as
@@ -744,17 +753,74 @@ Examples:
 }
 
 // startServer starts the MCP server with the given tools
-func startServer(ctx context.Context, srv *mcp.Server, serverTools []tools.ServerTool, endpoint string, logger *logrus.Logger) error {
+func startServer(ctx context.Context, srv *mcp.Server, serverTools []tools.ServerTool, endpoint, listen string, logger *logrus.Logger) error {
 	for _, st := range serverTools {
 		srv.AddTool(st.Tool, st.Handler)
 	}
 
 	logger.Infof("Starting MCP server with %d tools", len(serverTools))
 
-	if endpoint != "stdio" {
-		logger.Infof("Unknown endpoint %s, using stdio", endpoint)
+	kind, warning := resolveEndpoint(endpoint)
+	if warning != "" {
+		logger.Warn(warning)
 	}
+	if kind == endpointHTTP {
+		return serveHTTP(ctx, srv, listen, logger)
+	}
+
 	if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil {
+		return fmt.Errorf("server error: %w", err)
+	}
+
+	return nil
+}
+
+// Transport kinds returned by resolveEndpoint.
+const (
+	endpointStdio = "stdio"
+	endpointHTTP  = "http"
+)
+
+// resolveEndpoint maps a configured endpoint name to a transport kind,
+// along with a warning to log if the name was not an exact match.
+// Anything unrecognised falls back to stdio, which is the only transport
+// an MCP client launching us as a subprocess can use.
+func resolveEndpoint(endpoint string) (kind, warning string) {
+	switch endpoint {
+	case "", endpointStdio:
+		return endpointStdio, ""
+	case endpointHTTP, "streamable-http":
+		return endpointHTTP, ""
+	case "sse":
+		// The standalone SSE transport is deprecated by the MCP spec in
+		// favour of streamable HTTP, which serves SSE responses itself.
+		return endpointHTTP, fmt.Sprintf("mcp_endpoint %q is deprecated, serving streamable HTTP instead", endpoint)
+	default:
+		return endpointStdio, fmt.Sprintf("Unknown endpoint %q, using stdio", endpoint)
+	}
+}
+
+// serveHTTP serves the MCP server over the streamable HTTP transport,
+// shutting the listener down when ctx is cancelled.
+func serveHTTP(ctx context.Context, srv *mcp.Server, listen string, logger *logrus.Logger) error {
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+	httpSrv := &http.Server{
+		Addr:              listen,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+			logger.Warnf("HTTP shutdown: %v", err)
+		}
+	}()
+
+	logger.Infof("Listening for streamable HTTP MCP connections on %s", listen)
+	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("server error: %w", err)
 	}
 

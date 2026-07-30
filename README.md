@@ -64,9 +64,21 @@ export ARGOCD_MCP_ARGOCD_TOKEN="your-token"
 # Using stdio (default, recommended for Claude Code)
 ./argocd-mcp serve
 
-# Using SSE
-./argocd-mcp serve --mcp-endpoint sse
+# Using streamable HTTP (listens on 127.0.0.1:8000 by default)
+./argocd-mcp serve --mcp-endpoint http
+
+# ...on a different address
+./argocd-mcp serve --mcp-endpoint http --listen 0.0.0.0:9000
 ```
+
+`--mcp-endpoint` overrides `server.mcp_endpoint` from the config file.
+`sse` is accepted as an alias for `http`: the standalone SSE transport is
+deprecated by the MCP spec in favour of streamable HTTP, which serves SSE
+responses itself.
+
+> The HTTP transport has no authentication of its own — anything that can
+> reach the port can drive your ArgoCD. Keep it bound to localhost, or put
+> it behind an authenticating proxy.
 
 ### CLI Commands
 
