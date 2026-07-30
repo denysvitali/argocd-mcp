@@ -184,9 +184,18 @@ The server communicates over stdio by default.`,
 	serveCmd.Flags().Bool("read-write", false, "Enable write operations (overrides read-only default and config file)")
 	serveCmd.Flags().Bool("allow-deletes", false, "Enable delete operations (requires --read-write; deletes are always gated separately)")
 
-	// Config init command
+	// Config command group. Cobra derives a command's name from the first
+	// word of Use, so registering "config init" and "config show" as
+	// siblings on rootCmd created two commands both named "config" and
+	// "config show" silently ran init instead.
 	configCmd := &cobra.Command{
-		Use:   "config init",
+		Use:   "config",
+		Short: "Manage configuration",
+	}
+
+	// Config init command
+	configInitCmd := &cobra.Command{
+		Use:   "init",
 		Short: "Initialize configuration",
 		Long: `Initialize ArgoCD MCP configuration.
 
@@ -293,19 +302,19 @@ Or run interactively without flags:
 	}
 
 	// Add flags for non-interactive configuration
-	configCmd.Flags().StringP("server", "s", "", "ArgoCD server address (e.g., argocd.example.com:443)")
-	configCmd.Flags().StringP("username", "u", "", "Username for authentication")
-	configCmd.Flags().StringP("password", "p", "", "Password for authentication")
-	configCmd.Flags().StringP("token", "t", "", "Authentication token (alternative to username/password)")
-	configCmd.Flags().BoolP("insecure", "k", false, "Skip TLS certificate verification")
-	configCmd.Flags().BoolP("plaintext", "", false, "Use HTTP without TLS (for testing only)")
-	configCmd.Flags().StringP("cert-file", "c", "", "Path to CA certificate file")
-	configCmd.Flags().Bool("grpc-web", false, "Enable gRPC-Web mode (use when ArgoCD is behind a reverse proxy that doesn't support native gRPC)")
-	configCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests (e.g., /argo-cd)")
+	configInitCmd.Flags().StringP("server", "s", "", "ArgoCD server address (e.g., argocd.example.com:443)")
+	configInitCmd.Flags().StringP("username", "u", "", "Username for authentication")
+	configInitCmd.Flags().StringP("password", "p", "", "Password for authentication")
+	configInitCmd.Flags().StringP("token", "t", "", "Authentication token (alternative to username/password)")
+	configInitCmd.Flags().BoolP("insecure", "k", false, "Skip TLS certificate verification")
+	configInitCmd.Flags().BoolP("plaintext", "", false, "Use HTTP without TLS (for testing only)")
+	configInitCmd.Flags().StringP("cert-file", "c", "", "Path to CA certificate file")
+	configInitCmd.Flags().Bool("grpc-web", false, "Enable gRPC-Web mode (use when ArgoCD is behind a reverse proxy that doesn't support native gRPC)")
+	configInitCmd.Flags().String("grpc-web-root-path", "", "Root path for gRPC-Web requests (e.g., /argo-cd)")
 
 	// Config show command
 	configShowCmd := &cobra.Command{
-		Use:   "config show",
+		Use:   "show",
 		Short: "Show current configuration",
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg, err := config.LoadConfig(logger, "")
@@ -720,8 +729,9 @@ Examples:
 
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(serveCmd)
+	configCmd.AddCommand(configInitCmd)
+	configCmd.AddCommand(configShowCmd)
 	rootCmd.AddCommand(configCmd)
-	rootCmd.AddCommand(configShowCmd)
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(testCmd)
 	rootCmd.AddCommand(callCmd)

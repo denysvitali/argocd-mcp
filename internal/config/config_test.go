@@ -135,6 +135,21 @@ logging:
 		assert.Equal(t, "env-admin", cfg.ArgoCD.Username)
 		assert.Equal(t, "env-secret", cfg.ArgoCD.Password)
 	})
+
+	// Regression: with no config file at all, viper's AutomaticEnv only
+	// resolves keys it already knows about, so ARGOCD_MCP_ARGOCD_TOKEN was
+	// silently dropped and the server refused to start with
+	// "authentication required" despite the documented env var being set.
+	t.Run("env vars work without a config file", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		t.Setenv("ARGOCD_MCP_ARGOCD_SERVER", "env.example.com:443")
+		t.Setenv("ARGOCD_MCP_ARGOCD_TOKEN", "env-token")
+
+		cfg, err := LoadConfig(logrus.New(), "")
+		require.NoError(t, err)
+		assert.Equal(t, "env.example.com:443", cfg.ArgoCD.Server)
+		assert.Equal(t, "env-token", cfg.ArgoCD.Token)
+	})
 }
 
 // TestLoadConfig_IgnoresCwdConfig verifies that a config.yaml in the

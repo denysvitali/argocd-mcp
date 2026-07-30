@@ -62,6 +62,23 @@ func LoadConfig(logger *logrus.Logger, configPath string) (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
+	// AutomaticEnv only resolves keys viper already knows about (defaults,
+	// flags, or config-file entries), so keys that exist purely as env vars
+	// are silently dropped by Unmarshal. Bind them explicitly.
+	for _, key := range []string{
+		"argocd.token",
+		"argocd.username",
+		"argocd.password",
+		"argocd.auth_url",
+		"argocd.cert_file",
+		"argocd.grpc_web",
+		"argocd.grpc_web_root_path",
+	} {
+		if err := v.BindEnv(key); err != nil {
+			return nil, fmt.Errorf("failed to bind env for %s: %w", key, err)
+		}
+	}
+
 	// Config file support
 	if configPath != "" {
 		v.SetConfigFile(configPath)
