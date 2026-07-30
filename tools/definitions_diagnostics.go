@@ -1,6 +1,6 @@
 package tools
 
-import "github.com/mark3labs/mcp-go/mcp"
+import "github.com/modelcontextprotocol/go-sdk/mcp"
 
 // diagnosticsToolDefinitions returns the MCP tool definitions for the diagnostics domain.
 func diagnosticsToolDefinitions() []mcp.Tool {
@@ -20,7 +20,7 @@ func diagnosticsToolDefinitions() []mcp.Tool {
 				"and a prioritised list of next actions. " +
 				"Use this as the FIRST tool call whenever an application is unhealthy or misbehaving. " +
 				"The previous container logs are especially valuable for diagnosing CrashLoopBackOff and OOMKilled.",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -38,7 +38,7 @@ func diagnosticsToolDefinitions() []mcp.Tool {
 				"Flags over-provisioned containers, generates right-sizing suggestions with 20% headroom, " +
 				"and estimates monthly cost waste. Requires metrics-server in the cluster for live usage data; " +
 				"without it the tool still reports declared requests and flags missing resource requests.",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{

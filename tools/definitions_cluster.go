@@ -1,6 +1,6 @@
 package tools
 
-import "github.com/mark3labs/mcp-go/mcp"
+import "github.com/modelcontextprotocol/go-sdk/mcp"
 
 // clusterToolDefinitions returns the MCP tool definitions for the cluster domain.
 func clusterToolDefinitions() []mcp.Tool {
@@ -8,7 +8,7 @@ func clusterToolDefinitions() []mcp.Tool {
 		{
 			Name:        "list_clusters",
 			Description: "List all configured clusters",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"server": map[string]interface{}{
@@ -25,7 +25,7 @@ func clusterToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_cluster",
 			Description: "Get details of a specific cluster",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"server": map[string]interface{}{
@@ -39,7 +39,7 @@ func clusterToolDefinitions() []mcp.Tool {
 		{
 			Name:        "create_cluster",
 			Description: "Create a new cluster connection",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"server": map[string]interface{}{
@@ -89,7 +89,7 @@ func clusterToolDefinitions() []mcp.Tool {
 		{
 			Name:        "update_cluster",
 			Description: "Update an existing cluster",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"server": map[string]interface{}{
@@ -122,7 +122,7 @@ func clusterToolDefinitions() []mcp.Tool {
 		{
 			Name:        "delete_cluster",
 			Description: "Delete a cluster",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"server": map[string]interface{}{

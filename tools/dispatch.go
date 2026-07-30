@@ -2,10 +2,10 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // handlerFunc is the signature shared by all tool handlers.
@@ -78,11 +78,16 @@ func (tm *ToolManager) handlerRegistry() map[string]handlerFunc {
 }
 
 // getToolHandler returns the handler for a specific tool
-func (tm *ToolManager) getToolHandler(name string) server.ToolHandlerFunc {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		arguments, ok := request.Params.Arguments.(map[string]interface{})
-		if !ok {
-			return errorResult("Invalid arguments format"), nil
+func (tm *ToolManager) getToolHandler(name string) mcp.ToolHandler {
+	return func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// The official SDK's low-level ToolHandler hands us the raw
+		// arguments as received on the wire; our handlers all work on a
+		// decoded map.
+		arguments := map[string]interface{}{}
+		if raw := request.Params.Arguments; len(raw) > 0 {
+			if err := json.Unmarshal(raw, &arguments); err != nil {
+				return errorResult("Invalid arguments format"), nil
+			}
 		}
 
 		handler, ok := tm.handlerRegistry()[name]

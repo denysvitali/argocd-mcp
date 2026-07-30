@@ -14,7 +14,7 @@ import (
 	"github.com/denysvitali/argocd-mcp/internal/auth"
 	"github.com/denysvitali/argocd-mcp/internal/client"
 	"github.com/denysvitali/argocd-mcp/internal/config"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,7 +80,7 @@ func getTextContent(result *mcp.CallToolResult) string {
 	if len(result.Content) == 0 {
 		return ""
 	}
-	if tc, ok := result.Content[0].(mcp.TextContent); ok {
+	if tc, ok := result.Content[0].(*mcp.TextContent); ok {
 		return tc.Text
 	}
 	return ""

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/application"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // handleRefreshApplication forces ArgoCD to re-fetch manifests from Git

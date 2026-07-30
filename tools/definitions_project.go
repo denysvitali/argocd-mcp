@@ -1,6 +1,6 @@
 package tools
 
-import "github.com/mark3labs/mcp-go/mcp"
+import "github.com/modelcontextprotocol/go-sdk/mcp"
 
 // projectToolDefinitions returns the MCP tool definitions for the project domain.
 func projectToolDefinitions() []mcp.Tool {
@@ -8,7 +8,7 @@ func projectToolDefinitions() []mcp.Tool {
 		{
 			Name:        "list_projects",
 			Description: "List all ArgoCD projects",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -25,7 +25,7 @@ func projectToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_project",
 			Description: "Get detailed information about a specific project",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -39,7 +39,7 @@ func projectToolDefinitions() []mcp.Tool {
 		{
 			Name:        "create_project",
 			Description: "Create a new ArgoCD project",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -79,7 +79,7 @@ func projectToolDefinitions() []mcp.Tool {
 		{
 			Name:        "update_project",
 			Description: "Update an existing project",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -104,7 +104,7 @@ func projectToolDefinitions() []mcp.Tool {
 		{
 			Name:        "delete_project",
 			Description: "Delete a project",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -118,7 +118,7 @@ func projectToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_project_events",
 			Description: "Get events for a project",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{

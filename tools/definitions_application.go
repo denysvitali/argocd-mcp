@@ -1,6 +1,6 @@
 package tools
 
-import "github.com/mark3labs/mcp-go/mcp"
+import "github.com/modelcontextprotocol/go-sdk/mcp"
 
 // applicationToolDefinitions returns the MCP tool definitions for the application domain.
 func applicationToolDefinitions() []mcp.Tool {
@@ -8,7 +8,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "list_applications",
 			Description: "List all applications with optional filtering by name or project",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -29,7 +29,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_application",
 			Description: "Get detailed information about a specific application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -43,7 +43,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "create_application",
 			Description: "Create a new ArgoCD application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -73,7 +73,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "delete_application",
 			Description: "Delete an application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -91,7 +91,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "sync_application",
 			Description: "Trigger a manual sync for an application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -113,7 +113,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_application_manifests",
 			Description: "Get the manifests for an application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -131,7 +131,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_application_diff",
 			Description: "Get the diff between live and desired state for an application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -149,7 +149,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_application_events",
 			Description: "Get events for an application, optionally filtered by a specific resource",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -183,7 +183,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "update_application",
 			Description: "Update an existing application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -213,7 +213,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "rollback_application",
 			Description: "Rollback an application to a previous revision",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -231,7 +231,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "list_resource_actions",
 			Description: "List available actions for a resource in an application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -261,7 +261,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "run_resource_action",
 			Description: "Run an action on a resource in an application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -295,7 +295,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_application_resource",
 			Description: "Get details of a specific resource in an application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -325,7 +325,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "patch_application_resource",
 			Description: "Patch a resource in an application using JSON patch",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -363,7 +363,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "delete_application_resource",
 			Description: "Delete a resource from an application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -401,7 +401,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_logs",
 			Description: "Get logs from pods/resources in an application",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -455,7 +455,7 @@ func applicationToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_resource_tree",
 			Description: "Get the resource hierarchy tree for an application, showing parent-child relationships between all Kubernetes resources",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{

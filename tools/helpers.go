@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/emptypb"
 	yaml "sigs.k8s.io/yaml"
@@ -44,8 +44,7 @@ func Result(data interface{}, err error) (*mcp.CallToolResult, error) {
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
+			&mcp.TextContent{
 				Text: string(yamlData),
 			},
 		},
@@ -85,8 +84,7 @@ func ResultList(items interface{}, total int, err error) (*mcp.CallToolResult, e
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
+			&mcp.TextContent{
 				Text: string(yamlData),
 			},
 		},
@@ -97,8 +95,7 @@ func ResultList(items interface{}, total int, err error) (*mcp.CallToolResult, e
 func TextResult(text string) (*mcp.CallToolResult, error) {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
+			&mcp.TextContent{
 				Text: text,
 			},
 		},
@@ -109,8 +106,7 @@ func TextResult(text string) (*mcp.CallToolResult, error) {
 func errorResult(message string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
+			&mcp.TextContent{
 				Text: message,
 			},
 		},

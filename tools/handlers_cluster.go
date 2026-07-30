@@ -6,7 +6,7 @@ import (
 
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/cluster"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Cluster handlers

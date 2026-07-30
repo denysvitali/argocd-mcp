@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // propertySchema is a JSON-schema fragment for a single tool argument.
@@ -41,11 +39,11 @@ func decodeArgs[T any](arguments map[string]interface{}) (T, error) {
 //	desc:"..."              human-readable description
 //	required:"true"         adds the field to the schema's required list
 //	enum:"a,b,c"            allowed values for string fields
-func schemaFor[T any]() mcp.ToolInputSchema {
+func schemaFor[T any]() ToolInputSchema {
 	var zero T
 	t := reflect.TypeOf(zero)
 	properties, required := structProperties(t)
-	return mcp.ToolInputSchema{
+	return ToolInputSchema{
 		Type:       "object",
 		Properties: toPropertyMap(properties),
 		Required:   required,

@@ -16,8 +16,7 @@ import (
 	"github.com/denysvitali/argocd-mcp/internal/client"
 	"github.com/denysvitali/argocd-mcp/internal/config"
 	"github.com/denysvitali/argocd-mcp/tools"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
@@ -173,7 +172,10 @@ The server communicates over stdio by default.`,
 			}()
 
 			// Start server
-			mcpSrv := server.NewMCPServer("argocd-mcp", version)
+			mcpSrv := mcp.NewServer(&mcp.Implementation{
+				Name:    "argocd-mcp",
+				Version: version,
+			}, nil)
 			return startServer(ctx, mcpSrv, serverTools, cfg.Server.MCPEndpoint, logger)
 		},
 	}
@@ -742,22 +744,18 @@ Examples:
 }
 
 // startServer starts the MCP server with the given tools
-func startServer(_ context.Context, srv *server.MCPServer, tools []server.ServerTool, endpoint string, logger *logrus.Logger) error {
-	// Add all tools to the server
-	srv.AddTools(tools...)
+func startServer(ctx context.Context, srv *mcp.Server, serverTools []tools.ServerTool, endpoint string, logger *logrus.Logger) error {
+	for _, st := range serverTools {
+		srv.AddTool(st.Tool, st.Handler)
+	}
 
-	logger.Infof("Starting MCP server with %d tools", len(tools))
+	logger.Infof("Starting MCP server with %d tools", len(serverTools))
 
-	switch endpoint {
-	case "stdio":
-		if err := server.ServeStdio(srv); err != nil {
-			return fmt.Errorf("server error: %w", err)
-		}
-	default:
+	if endpoint != "stdio" {
 		logger.Infof("Unknown endpoint %s, using stdio", endpoint)
-		if err := server.ServeStdio(srv); err != nil {
-			return fmt.Errorf("server error: %w", err)
-		}
+	}
+	if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil {
+		return fmt.Errorf("server error: %w", err)
 	}
 
 	return nil

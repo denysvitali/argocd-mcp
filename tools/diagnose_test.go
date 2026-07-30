@@ -9,7 +9,7 @@ import (
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	healthlib "github.com/argoproj/gitops-engine/pkg/health"
 	"github.com/denysvitali/argocd-mcp/internal/client"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -432,7 +432,7 @@ func decodeReport(t *testing.T, result *mcp.CallToolResult) DiagnosticReport {
 	if result == nil || len(result.Content) == 0 {
 		t.Fatal("result is nil or has no content")
 	}
-	textContent, ok := result.Content[0].(mcp.TextContent)
+	textContent, ok := result.Content[0].(*mcp.TextContent)
 	if !ok {
 		t.Fatalf("expected mcp.TextContent, got %T", result.Content[0])
 	}

@@ -5,10 +5,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"encoding/json"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sirupsen/logrus"
 )
+
+// ServerTool pairs a tool definition with the handler that serves it.
+// The official SDK registers the two separately via Server.AddTool, so we
+// carry them together to keep the filtering logic in one place.
+type ServerTool struct {
+	Tool    *mcp.Tool
+	Handler mcp.ToolHandler
+}
 
 // Default timeout constant
 const defaultSyncTimeout = 60 * time.Second
@@ -146,9 +155,9 @@ func NewToolManagerWithMetrics(client ArgoClient, kubeMetrics KubeMetricsClient,
 // GetServerTools returns tools filtered by the current access mode.
 // Write and delete tools are omitted in safe (read-only) mode; delete tools
 // are also omitted when allowDeletes is false.
-func (tm *ToolManager) GetServerTools() []server.ServerTool {
+func (tm *ToolManager) GetServerTools() []ServerTool {
 	tm.defineTools()
-	var serverTools []server.ServerTool
+	var serverTools []ServerTool
 	for _, tool := range tm.tools {
 		if tm.safeMode && (writeTools[tool.Name] || deleteTools[tool.Name]) {
 			continue
@@ -156,8 +165,8 @@ func (tm *ToolManager) GetServerTools() []server.ServerTool {
 		if !tm.allowDeletes && deleteTools[tool.Name] {
 			continue
 		}
-		serverTools = append(serverTools, server.ServerTool{
-			Tool:    tool,
+		serverTools = append(serverTools, ServerTool{
+			Tool:    &tool,
 			Handler: tm.getToolHandler(tool.Name),
 		})
 	}
@@ -170,14 +179,16 @@ func (tm *ToolManager) CallTool(ctx context.Context, name string, arguments map[
 	if handler == nil {
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
-	// Create a proper CallToolRequest
-	request := mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      name,
-			Arguments: arguments,
-		},
+	raw, err := json.Marshal(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode arguments: %w", err)
 	}
-	return handler(ctx, request)
+	return handler(ctx, &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name:      name,
+			Arguments: raw,
+		},
+	})
 }
 
 // GetToolNames returns all available tool names

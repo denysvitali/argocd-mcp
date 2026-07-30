@@ -12,7 +12,7 @@ import (
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	healthlib "github.com/argoproj/gitops-engine/pkg/health"
 	"github.com/denysvitali/argocd-mcp/internal/client"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +33,7 @@ func parseResultYAML(t *testing.T, result *mcp.CallToolResult) map[string]interf
 	t.Helper()
 	require.NotNil(t, result)
 	require.NotEmpty(t, result.Content)
-	text := result.Content[0].(mcp.TextContent).Text
+	text := result.Content[0].(*mcp.TextContent).Text
 	var data map[string]interface{}
 	require.NoError(t, yaml.Unmarshal([]byte(text), &data))
 	return data
@@ -44,7 +44,7 @@ func parseResultText(t *testing.T, result *mcp.CallToolResult) string {
 	t.Helper()
 	require.NotNil(t, result)
 	require.NotEmpty(t, result.Content)
-	return result.Content[0].(mcp.TextContent).Text
+	return result.Content[0].(*mcp.TextContent).Text
 }
 
 // makeApp creates a test Application with sensible defaults.

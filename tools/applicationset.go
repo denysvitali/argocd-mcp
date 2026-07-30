@@ -7,7 +7,7 @@ import (
 
 	"github.com/argoproj/argo-cd/v3/pkg/apiclient/applicationset"
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	yaml "sigs.k8s.io/yaml"
 )
@@ -90,7 +90,7 @@ func applicationSetToolDefinitions() []mcp.Tool {
 		{
 			Name:        "list_applicationsets",
 			Description: "List all ArgoCD ApplicationSets with their generator types, condition status, and managed application counts",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"project": map[string]interface{}{
@@ -107,7 +107,7 @@ func applicationSetToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_applicationset",
 			Description: "Get full details of a specific ApplicationSet including generator config, conditions, progressive rollout status, and the resource tree of generated applications",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{
@@ -124,7 +124,7 @@ func applicationSetToolDefinitions() []mcp.Tool {
 				"exactly which Applications would be created without making any changes. " +
 				"Accepts either a full ApplicationSet YAML/JSON spec string or a name of an existing ApplicationSet to re-evaluate. " +
 				"This is a read-only operation — nothing is created or modified.",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"spec": map[string]interface{}{
@@ -144,7 +144,7 @@ func applicationSetToolDefinitions() []mcp.Tool {
 		{
 			Name:        "create_applicationset",
 			Description: "Create a new ArgoCD ApplicationSet from a YAML or JSON spec. Blocked in safe mode.",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"spec": map[string]interface{}{
@@ -162,7 +162,7 @@ func applicationSetToolDefinitions() []mcp.Tool {
 		{
 			Name:        "delete_applicationset",
 			Description: "Delete an ArgoCD ApplicationSet. Blocked in safe mode.",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"name": map[string]interface{}{

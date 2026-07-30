@@ -1,6 +1,6 @@
 package tools
 
-import "github.com/mark3labs/mcp-go/mcp"
+import "github.com/modelcontextprotocol/go-sdk/mcp"
 
 // repositoryToolDefinitions returns the MCP tool definitions for the repository domain.
 func repositoryToolDefinitions() []mcp.Tool {
@@ -8,7 +8,7 @@ func repositoryToolDefinitions() []mcp.Tool {
 		{
 			Name:        "list_repositories",
 			Description: "List all configured repositories",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"repo_url": map[string]interface{}{
@@ -25,7 +25,7 @@ func repositoryToolDefinitions() []mcp.Tool {
 		{
 			Name:        "get_repository",
 			Description: "Get details of a specific repository",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"repo_url": map[string]interface{}{
@@ -39,7 +39,7 @@ func repositoryToolDefinitions() []mcp.Tool {
 		{
 			Name:        "create_repository",
 			Description: "Create a new repository connection",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"repo_url": map[string]interface{}{
@@ -73,7 +73,7 @@ func repositoryToolDefinitions() []mcp.Tool {
 		{
 			Name:        "update_repository",
 			Description: "Update an existing repository",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"repo_url": map[string]interface{}{
@@ -99,7 +99,7 @@ func repositoryToolDefinitions() []mcp.Tool {
 		{
 			Name:        "delete_repository",
 			Description: "Delete a repository",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"repo_url": map[string]interface{}{
@@ -113,7 +113,7 @@ func repositoryToolDefinitions() []mcp.Tool {
 		{
 			Name:        "validate_repository",
 			Description: "Validate repository access",
-			InputSchema: mcp.ToolInputSchema{
+			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{
 					"repo_url": map[string]interface{}{
