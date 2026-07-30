@@ -13,7 +13,7 @@ import (
 
 func (tm *ToolManager) handleListRepositories(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	repoURL := String(arguments, "repo_url", "")
-	limit := Int(arguments, "limit", MaxListItems)
+	limit := Limit(arguments, "limit", MaxListItems, MaxLimit)
 	query := &repository.RepoQuery{}
 	if repoURL != "" {
 		query.Repo = repoURL
@@ -21,7 +21,7 @@ func (tm *ToolManager) handleListRepositories(ctx context.Context, arguments map
 
 	repos, err := tm.client.ListRepositories(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// Apply limit
@@ -50,7 +50,7 @@ func (tm *ToolManager) handleGetRepository(ctx context.Context, arguments map[st
 
 	repo, err := tm.client.GetRepository(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -95,7 +95,7 @@ func (tm *ToolManager) handleCreateRepository(ctx context.Context, arguments map
 
 	createdRepo, err := tm.client.CreateRepository(ctx, createReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -150,7 +150,7 @@ func (tm *ToolManager) handleUpdateRepository(ctx context.Context, arguments map
 
 	updatedRepo, err := tm.client.UpdateRepository(ctx, updateReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -175,7 +175,7 @@ func (tm *ToolManager) handleDeleteRepository(ctx context.Context, arguments map
 
 	err := tm.client.DeleteRepository(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{

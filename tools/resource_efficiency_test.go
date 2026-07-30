@@ -129,7 +129,11 @@ func TestAnalyzeResourceEfficiency_NoMetricsClient(t *testing.T) {
 	assert.Equal(t, "my-app", data["application_name"])
 	assert.EqualValues(t, 1, data["total_workloads"])
 	assert.False(t, data["metrics_available"].(bool))
-	assert.Contains(t, data["summary"].(string), "metrics are not available")
+	assert.Contains(t, data["summary"].(string), "Live usage metrics are unavailable")
+	// The summary must name the actual cause rather than assert that
+	// metrics-server is missing, which is only one of the possibilities.
+	assert.Contains(t, data["summary"].(string), "without access to a Kubernetes metrics API")
+	assert.Contains(t, data["metrics_unavailable_reason"].(string), "without access to a Kubernetes metrics API")
 }
 
 func TestAnalyzeResourceEfficiency_WithMetrics_OverProvisioned(t *testing.T) {
@@ -492,7 +496,7 @@ func TestBuildContainerEfficiency_NoMetrics(t *testing.T) {
 	assert.False(t, ce.MetricsAvailable)
 	assert.EqualValues(t, 500, ce.CPURequestMillis)
 	assert.EqualValues(t, 256*1024*1024, ce.MemoryRequestBytes)
-	assert.Contains(t, ce.Recommendation, "Metrics API unavailable")
+	assert.Contains(t, ce.Recommendation, "Live usage unavailable")
 }
 
 func TestBuildContainerEfficiency_OverProvisioned(t *testing.T) {

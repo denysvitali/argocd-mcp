@@ -14,8 +14,12 @@ import (
 
 // Response limits to prevent context explosion
 const (
-	// MaxListItems limits the number of items returned in list operations
+	// MaxListItems is the default number of items returned in list operations
 	MaxListItems = 50
+	// MaxLimit is the highest limit a caller may ask for. It matches the
+	// "max: 100" the tool schemas advertise; before this was enforced the
+	// documented ceiling was decorative.
+	MaxLimit = 100
 	// MaxEvents limits the number of events returned
 	MaxEvents = 20
 	// MaxDiffResources limits the number of resources in diff output
@@ -31,7 +35,7 @@ const (
 // Result returns a YAML-formatted result
 func Result(data interface{}, err error) (*mcp.CallToolResult, error) {
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// Truncate data to prevent context explosion
@@ -54,7 +58,7 @@ func Result(data interface{}, err error) (*mcp.CallToolResult, error) {
 // ResultList returns a YAML-formatted result for lists
 func ResultList(items interface{}, total int, err error) (*mcp.CallToolResult, error) {
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	type listResponse struct {
@@ -114,6 +118,43 @@ func errorResult(message string) *mcp.CallToolResult {
 	}
 }
 
+// errorFromRPC turns an ArgoCD API error into something worth putting in
+// front of a language model.
+//
+// The raw form is transport noise the caller can neither act on nor
+// meaningfully relay:
+//
+//	rpc error: code = NotFound desc = appprojects.argoproj.io "x" not found
+//
+// Everything before "desc = " is stripped, and the gRPC code becomes a
+// short prefix only when it tells the caller something the message does
+// not: that they lack permission, or that the request timed out.
+func errorFromRPC(err error) *mcp.CallToolResult {
+	if err == nil {
+		return errorResult("unknown error")
+	}
+
+	msg := err.Error()
+	if i := strings.LastIndex(msg, "desc = "); i >= 0 {
+		msg = msg[i+len("desc = "):]
+	}
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		msg = err.Error()
+	}
+
+	switch {
+	case strings.Contains(err.Error(), "code = PermissionDenied"),
+		strings.Contains(err.Error(), "code = Unauthenticated"):
+		return errorResult("permission denied: " + msg)
+	case strings.Contains(err.Error(), "code = DeadlineExceeded"):
+		return errorResult("timed out: " + msg)
+	case strings.Contains(err.Error(), "code = Unavailable"):
+		return errorResult("ArgoCD unreachable: " + msg)
+	}
+	return errorResult(msg)
+}
+
 // Bool returns the bool value of the argument
 func Bool(arguments map[string]interface{}, key string, defaultValue bool) bool {
 	if val, ok := arguments[key]; ok {
@@ -147,6 +188,24 @@ func Int(arguments map[string]interface{}, key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// Limit reads a caller-supplied list limit and forces it into a usable
+// range: at least 1, at most maxValue, defaultValue when absent or absurd.
+//
+// Every list handler slices its results with this value, so an unclamped
+// negative limit panics with "slice bounds out of range" and takes the
+// whole server down with it. The callers here are language models, which
+// emit -1 for "no limit" often enough that this must never be trusted.
+func Limit(arguments map[string]interface{}, key string, defaultValue, maxValue int) int {
+	limit := Int(arguments, key, defaultValue)
+	if limit < 1 {
+		return defaultValue
+	}
+	if limit > maxValue {
+		return maxValue
+	}
+	return limit
 }
 
 // Int64 returns the int64 value of the argument
@@ -298,8 +357,17 @@ func truncateResponse(value interface{}) interface{} {
 		truncated = truncateLines(truncated, MaxResponseLines)
 		return truncated
 	case []interface{}:
-		if len(v) > MaxListItems {
-			return v[:MaxListItems]
+		// Backstop only: handlers apply their own limits, which are
+		// clamped to MaxLimit. Truncating here used to be silent, so a
+		// response could claim "limited: false" while quietly dropping
+		// items; if this ever fires, say so in the payload.
+		if len(v) > MaxLimit {
+			truncated := make([]interface{}, 0, MaxLimit+1)
+			truncated = append(truncated, v[:MaxLimit]...)
+			truncated = append(truncated, map[string]interface{}{
+				"_truncated": fmt.Sprintf("%d further items omitted by the %d-item response cap", len(v)-MaxLimit, MaxLimit),
+			})
+			return truncated
 		}
 		return v
 	case map[string]interface{}:

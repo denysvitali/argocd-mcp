@@ -180,7 +180,7 @@ func applicationSetToolDefinitions() []mcp.Tool {
 // handleListApplicationSets lists ApplicationSets with optional project filter.
 func (tm *ToolManager) handleListApplicationSets(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	project := String(arguments, "project", "")
-	limit := Int(arguments, "limit", MaxListItems)
+	limit := Limit(arguments, "limit", MaxListItems, MaxLimit)
 	if limit > 100 {
 		limit = 100
 	}

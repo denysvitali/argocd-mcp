@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	corev1 "k8s.io/api/core/v1"
@@ -141,10 +142,14 @@ type WorkloadEfficiency struct {
 
 // ResourceEfficiencyReport is the top-level response from analyze_resource_efficiency.
 type ResourceEfficiencyReport struct {
-	ApplicationName  string               `json:"application_name" yaml:"application_name"`
-	Namespace        string               `json:"namespace" yaml:"namespace"`
-	MetricsAvailable bool                 `json:"metrics_available" yaml:"metrics_available"`
-	Workloads        []WorkloadEfficiency `json:"workloads" yaml:"workloads"`
+	ApplicationName  string `json:"application_name" yaml:"application_name"`
+	Namespace        string `json:"namespace" yaml:"namespace"`
+	MetricsAvailable bool   `json:"metrics_available" yaml:"metrics_available"`
+	// MetricsUnavailableReason says why live usage is missing. The tool
+	// used to assert metrics-server was not installed, which is only one
+	// of the possibilities — RBAC denial is at least as common.
+	MetricsUnavailableReason string               `json:"metrics_unavailable_reason,omitempty" yaml:"metrics_unavailable_reason,omitempty"`
+	Workloads                []WorkloadEfficiency `json:"workloads" yaml:"workloads"`
 
 	// Grand totals across all workloads in the app.
 	TotalWorkloads       int     `json:"total_workloads" yaml:"total_workloads"`
@@ -290,6 +295,10 @@ func (tm *ToolManager) handleAnalyzeResourceEfficiency(ctx context.Context, argu
 
 	// 4. Attempt to fetch metrics for the app namespace.
 	metricsAvailable := tm.kubeMetrics != nil
+	metricsUnavailableReason := ""
+	if !metricsAvailable {
+		metricsUnavailableReason = "the server was started without access to a Kubernetes metrics API (no in-cluster config and no --kubeconfig)"
+	}
 	// podMetrics maps pod name -> container name -> usage quantities.
 	podMetrics := map[string]map[string]containerUsage{}
 
@@ -298,6 +307,7 @@ func (tm *ToolManager) handleAnalyzeResourceEfficiency(ctx context.Context, argu
 		if metricsErr != nil {
 			tm.logger.Warnf("analyze_resource_efficiency: metrics API unavailable for namespace %q: %v", appNamespace, metricsErr)
 			metricsAvailable = false
+			metricsUnavailableReason = describeMetricsFailure(metricsErr, appNamespace)
 		} else {
 			for i := range podMetricsList.Items {
 				pm := &podMetricsList.Items[i]
@@ -342,11 +352,12 @@ func (tm *ToolManager) handleAnalyzeResourceEfficiency(ctx context.Context, argu
 
 	// 6. Build per-workload efficiency data.
 	report := ResourceEfficiencyReport{
-		ApplicationName:         appName,
-		Namespace:               appNamespace,
-		MetricsAvailable:        metricsAvailable,
-		CostModelCPUPerVCPUHour: cpuCostPerVCPUHour,
-		CostModelMemPerGBHour:   memCostPerGBHour,
+		ApplicationName:          appName,
+		Namespace:                appNamespace,
+		MetricsAvailable:         metricsAvailable,
+		MetricsUnavailableReason: metricsUnavailableReason,
+		CostModelCPUPerVCPUHour:  cpuCostPerVCPUHour,
+		CostModelMemPerGBHour:    memCostPerGBHour,
 	}
 
 	for _, wl := range workloads {
@@ -490,12 +501,31 @@ func buildContainerEfficiency(c liveContainer, agg *aggUsage, replicas int32, cp
 	return ce
 }
 
+// describeMetricsFailure turns a metrics API error into a cause the
+// caller can act on. "Install metrics-server" is bad advice when the
+// server is installed and the caller simply is not allowed to read it.
+func describeMetricsFailure(err error, namespace string) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "is forbidden"), strings.Contains(msg, "Unauthorized"):
+		return fmt.Sprintf("the service account is not allowed to read pod metrics in namespace %q (grant list on pods.metrics.k8s.io)", namespace)
+	case strings.Contains(msg, "could not find the requested resource"),
+		strings.Contains(msg, "server could not find"),
+		strings.Contains(msg, "no matches for kind"):
+		return "the metrics API is not served by this cluster (install metrics-server)"
+	case strings.Contains(msg, "context deadline exceeded"), strings.Contains(msg, "timeout"):
+		return "the metrics API timed out"
+	default:
+		return fmt.Sprintf("the metrics API returned an error: %s", msg)
+	}
+}
+
 func buildContainerRecommendation(ce ContainerEfficiency) string {
 	if ce.MissingRequests {
 		return "Missing resource requests: set CPU and memory requests to enable the scheduler to make good placement decisions and to allow efficiency analysis."
 	}
 	if !ce.MetricsAvailable {
-		return "Metrics API unavailable: install metrics-server to enable live usage analysis and right-sizing recommendations."
+		return "Live usage unavailable; only the declared requests above are known. See metrics_unavailable_reason on the report."
 	}
 	if ce.CPUOverProvisioned && ce.MemOverProvisioned {
 		return fmt.Sprintf(
@@ -532,11 +562,15 @@ func buildEfficiencySummary(r *ResourceEfficiencyReport) string {
 		return fmt.Sprintf("No workloads (Deployments/StatefulSets/DaemonSets) found in application %q.", r.ApplicationName)
 	}
 	if !r.MetricsAvailable {
+		reason := r.MetricsUnavailableReason
+		if reason == "" {
+			reason = "the metrics API could not be reached"
+		}
 		return fmt.Sprintf(
 			"Analyzed %d workload(s) in application %q (namespace: %s). "+
-				"Live usage metrics are not available - install metrics-server to enable right-sizing recommendations. "+
+				"Live usage metrics are unavailable because %s, so only declared requests are reported. "+
 				"%d workload(s) have missing resource requests.",
-			r.TotalWorkloads, r.ApplicationName, r.Namespace, r.MissingRequestsCount,
+			r.TotalWorkloads, r.ApplicationName, r.Namespace, reason, r.MissingRequestsCount,
 		)
 	}
 	return fmt.Sprintf(

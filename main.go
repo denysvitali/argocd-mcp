@@ -155,8 +155,19 @@ The server communicates over stdio by default.`,
 			}
 			pingCancel()
 
-			// Create tool manager
-			toolManager := tools.NewToolManager(argoClient, logger, cfg.Server.SafeMode, cfg.Server.AllowDeletes)
+			// Create tool manager. The Kubernetes metrics client is what
+			// makes analyze_resource_efficiency able to compare declared
+			// requests against live usage; without it that tool can only
+			// ever report "metrics unavailable", so build it when we can
+			// and carry on without it when we cannot.
+			kubeconfig, _ := cmd.Flags().GetString("kubeconfig")
+			kubeMetrics, metricsErr := tools.NewKubeMetricsClientFromConfig(kubeconfig)
+			if metricsErr != nil {
+				logger.Warnf("Kubernetes metrics unavailable, resource efficiency analysis will report declared requests only: %v", metricsErr)
+				kubeMetrics = nil
+			}
+
+			toolManager := tools.NewToolManagerWithMetrics(argoClient, kubeMetrics, logger, cfg.Server.SafeMode, cfg.Server.AllowDeletes)
 			structuredOutput := cfg.Server.StructuredOutput
 			if cmd.Flags().Changed("structured-output") {
 				structuredOutput, _ = cmd.Flags().GetBool("structured-output")
@@ -203,6 +214,7 @@ The server communicates over stdio by default.`,
 	serveCmd.Flags().String("mcp-endpoint", "", "Transport to serve on: stdio (default) or http")
 	serveCmd.Flags().String("listen", "127.0.0.1:8000", "Address to listen on when --mcp-endpoint=http")
 	serveCmd.Flags().Bool("structured-output", false, "Also return each tool result as JSON in structuredContent (duplicates the payload; only useful for clients that read it)")
+	serveCmd.Flags().String("kubeconfig", "", "Path to a kubeconfig for the Kubernetes metrics API (default: in-cluster config, else ~/.kube/config). Enables live usage data in analyze_resource_efficiency")
 
 	// Config command group. Cobra derives a command's name from the first
 	// word of Use, so registering "config init" and "config show" as

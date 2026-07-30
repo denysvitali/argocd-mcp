@@ -24,7 +24,7 @@ func (tm *ToolManager) handleRefreshApplication(ctx context.Context, arguments m
 
 	app, err := tm.client.GetApplication(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	type refreshResult struct {
@@ -80,7 +80,7 @@ func (tm *ToolManager) handleTerminateOperation(ctx context.Context, arguments m
 
 	err := tm.client.TerminateOperation(ctx, req)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	type terminateResult struct {
@@ -121,7 +121,7 @@ func (tm *ToolManager) handleRestartPod(ctx context.Context, arguments map[strin
 
 	err := tm.client.DeleteApplicationResource(ctx, deleteReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	type restartResult struct {

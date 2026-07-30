@@ -7,7 +7,7 @@ func applicationToolDefinitions() []mcp.Tool {
 	return []mcp.Tool{
 		{
 			Name:        "list_applications",
-			Description: "List all applications with optional filtering by name or project",
+			Description: "List all applications with optional filtering by name or project. Fields are omitted when they hold their uninteresting default: no 'server' means the in-cluster destination, no 'has_issues' means false, no 'out_of_sync_count' means zero, and no 'operation_phase' means the last sync succeeded.",
 			InputSchema: ToolInputSchema{
 				Type: "object",
 				Properties: map[string]interface{}{

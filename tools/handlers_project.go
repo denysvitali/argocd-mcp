@@ -14,7 +14,7 @@ import (
 
 func (tm *ToolManager) handleListProjects(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	name := String(arguments, "name", "")
-	limit := Int(arguments, "limit", MaxListItems)
+	limit := Limit(arguments, "limit", MaxListItems, MaxLimit)
 	query := &project.ProjectQuery{}
 	if name != "" {
 		query.Name = name
@@ -22,7 +22,7 @@ func (tm *ToolManager) handleListProjects(ctx context.Context, arguments map[str
 
 	projects, err := tm.client.ListProjects(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// Apply limit
@@ -50,7 +50,7 @@ func (tm *ToolManager) handleGetProject(ctx context.Context, arguments map[strin
 
 	proj, err := tm.client.GetProject(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -82,7 +82,7 @@ func (tm *ToolManager) handleCreateProject(ctx context.Context, arguments map[st
 
 	proj, err := tm.client.CreateProject(ctx, createReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -104,7 +104,7 @@ func (tm *ToolManager) handleUpdateProject(ctx context.Context, arguments map[st
 	query := &project.ProjectQuery{Name: name}
 	existingProj, err := tm.client.GetProject(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// Update fields if provided
@@ -118,7 +118,7 @@ func (tm *ToolManager) handleUpdateProject(ctx context.Context, arguments map[st
 
 	proj, err := tm.client.UpdateProject(ctx, updateReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -138,7 +138,7 @@ func (tm *ToolManager) handleDeleteProject(ctx context.Context, arguments map[st
 
 	err := tm.client.DeleteProject(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -153,7 +153,7 @@ func (tm *ToolManager) handleGetProjectEvents(ctx context.Context, arguments map
 
 	eventsRaw, err := tm.client.GetProjectEvents(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	events, parseErr := parseEvents(eventsRaw)

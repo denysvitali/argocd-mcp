@@ -17,7 +17,7 @@ import (
 func (tm *ToolManager) handleListApplications(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	name := String(arguments, "name", "")
 	project := String(arguments, "project", "")
-	limit := Int(arguments, "limit", MaxListItems)
+	limit := Limit(arguments, "limit", MaxListItems, MaxLimit)
 	if limit > 100 {
 		limit = 100
 	}
@@ -31,7 +31,7 @@ func (tm *ToolManager) handleListApplications(ctx context.Context, arguments map
 
 	apps, err := tm.client.ListApplications(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// Apply limit
@@ -61,7 +61,7 @@ func (tm *ToolManager) handleGetApplication(ctx context.Context, arguments map[s
 			tm.logger.Infof("get_application permission denied for %q, falling back to list", name)
 			return tm.getApplicationFromList(ctx, name)
 		}
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(formatApplicationDetail(app), nil)
@@ -120,7 +120,7 @@ func (tm *ToolManager) handleCreateApplication(ctx context.Context, arguments ma
 
 	app, err := tm.client.CreateApplication(ctx, createReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(formatApplicationDetail(app), nil)
@@ -140,7 +140,7 @@ func (tm *ToolManager) handleDeleteApplication(ctx context.Context, arguments ma
 
 	err := tm.client.DeleteApplication(ctx, deleteReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -167,7 +167,7 @@ func (tm *ToolManager) handleSyncApplication(ctx context.Context, arguments map[
 
 	app, err := tm.client.SyncApplication(ctx, syncReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -188,7 +188,7 @@ func (tm *ToolManager) handleGetApplicationManifests(ctx context.Context, argume
 
 	manifests, err := tm.client.GetApplicationManifests(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// Apply limit
@@ -213,16 +213,24 @@ func (tm *ToolManager) handleGetApplicationManifests(ctx context.Context, argume
 
 func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	name := String(arguments, "name", "")
-	limit := Int(arguments, "limit", MaxDiffResources)
+	limit := Limit(arguments, "limit", MaxDiffResources, MaxLimit)
 
 	resources, err := tm.client.GetManagedResources(ctx, name)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
-	// Format the diff information
+	// The Modified flag alone under-reports drift: a resource that exists
+	// in Git but not in the cluster has nothing to modify, so ArgoCD marks
+	// the application OutOfSync while every managed resource comes back
+	// Modified=false. Cross-check against the application's own per-
+	// resource sync status, which is what the UI shows.
+	outOfSyncRefs := tm.outOfSyncResourceRefs(ctx, name)
+
 	outOfSync := make([]interface{}, 0)
 	synced := make([]interface{}, 0)
+	outOfSyncTotal := 0
+	syncedTotal := 0
 
 	for _, r := range resources {
 		resourceInfo := map[string]interface{}{
@@ -232,9 +240,9 @@ func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments m
 			"name":      r.Name,
 		}
 
-		// Use Modified flag to determine sync status (preferred over deprecated Diff field)
-		if r.Modified || r.Diff != "" {
-			// Limit the number of out-of-sync resources reported
+		if r.Modified || r.Diff != "" || outOfSyncRefs[resourceKey(r.Group, r.Kind, r.Namespace, r.Name)] {
+			outOfSyncTotal++
+			// Count every drifted resource, but only render up to the limit.
 			if len(outOfSync) >= limit {
 				continue
 			}
@@ -251,20 +259,58 @@ func (tm *ToolManager) handleGetApplicationDiff(ctx context.Context, arguments m
 			resourceInfo["diff"] = diff
 			resourceInfo["resource_version"] = r.ResourceVersion
 			outOfSync = append(outOfSync, resourceInfo)
-		} else if len(synced) < limit {
+			continue
+		}
+
+		syncedTotal++
+		if len(synced) < limit {
 			resourceInfo["status"] = "Synced"
 			synced = append(synced, resourceInfo)
 		}
 	}
 
-	return Result(map[string]interface{}{
-		"application":       name,
-		"out_of_sync":       outOfSync,
-		"synced":            synced,
-		"total":             len(resources),
-		"out_of_sync_count": len(outOfSync),
-		"limited":           len(resources) > limit,
-	}, nil)
+	response := map[string]interface{}{
+		"application": name,
+		"out_of_sync": outOfSync,
+		"synced":      synced,
+		"total":       len(resources),
+		// Counts are of everything found, not of what fitted in the
+		// response; *_shown says how much is actually rendered below.
+		"out_of_sync_count": outOfSyncTotal,
+		"out_of_sync_shown": len(outOfSync),
+		"synced_count":      syncedTotal,
+		"synced_shown":      len(synced),
+		"limited":           len(outOfSync) < outOfSyncTotal || len(synced) < syncedTotal,
+	}
+	if response["limited"] == true {
+		response["limit_hint"] = fmt.Sprintf("Showing %d of %d out-of-sync and %d of %d synced resources. Raise 'limit' (max %d) to see more.",
+			len(outOfSync), outOfSyncTotal, len(synced), syncedTotal, MaxLimit)
+	}
+
+	return Result(response, nil)
+}
+
+// resourceKey identifies a resource across the two ArgoCD APIs that
+// describe it (managed resources and application status).
+func resourceKey(group, kind, namespace, name string) string {
+	return group + "/" + kind + "/" + namespace + "/" + name
+}
+
+// outOfSyncResourceRefs returns the set of resources the application
+// itself reports as OutOfSync. A failure here is not fatal: the caller
+// falls back to the managed-resources diff alone.
+func (tm *ToolManager) outOfSyncResourceRefs(ctx context.Context, name string) map[string]bool {
+	refs := map[string]bool{}
+	app, err := tm.client.GetApplication(ctx, &application.ApplicationQuery{Name: &name})
+	if err != nil || app == nil {
+		return refs
+	}
+	for _, r := range app.Status.Resources {
+		if r.Status == v1alpha1.SyncStatusCodeOutOfSync {
+			refs[resourceKey(r.Group, r.Kind, r.Namespace, r.Name)] = true
+		}
+	}
+	return refs
 }
 
 func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -273,7 +319,7 @@ func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments
 	group := String(arguments, "group", "")
 	kind := String(arguments, "kind", "")
 	namespace := String(arguments, "namespace", "")
-	limit := Int(arguments, "limit", MaxEvents)
+	limit := Limit(arguments, "limit", MaxEvents, MaxLimit)
 
 	query := &application.ApplicationResourceEventsQuery{
 		Name: &name,
@@ -281,7 +327,7 @@ func (tm *ToolManager) handleGetApplicationEvents(ctx context.Context, arguments
 
 	eventsRaw, err := tm.client.GetApplicationEvents(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	events, parseErr := parseEvents(eventsRaw)
@@ -403,7 +449,7 @@ func (tm *ToolManager) handleUpdateApplication(ctx context.Context, arguments ma
 	query := &application.ApplicationQuery{Name: &name}
 	existingApp, err := tm.client.GetApplication(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// Update fields if provided
@@ -426,7 +472,7 @@ func (tm *ToolManager) handleUpdateApplication(ctx context.Context, arguments ma
 
 	app, err := tm.client.UpdateApplication(ctx, updateReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(formatApplicationDetail(app), nil)
@@ -446,7 +492,7 @@ func (tm *ToolManager) handleRollbackApplication(ctx context.Context, arguments 
 
 	app, err := tm.client.RollbackApplication(ctx, rollbackReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -489,7 +535,7 @@ func (tm *ToolManager) handleListResourceActions(ctx context.Context, arguments 
 
 	actions, err := tm.client.ListResourceActions(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	actionList := make([]interface{}, len(actions))
@@ -544,7 +590,7 @@ func (tm *ToolManager) handleRunResourceAction(ctx context.Context, arguments ma
 
 	err := tm.client.RunResourceAction(ctx, actionReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -585,7 +631,7 @@ func (tm *ToolManager) handleGetApplicationResource(ctx context.Context, argumen
 
 	resource, err := tm.client.GetApplicationResource(ctx, resourceReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -636,7 +682,7 @@ func (tm *ToolManager) handlePatchApplicationResource(ctx context.Context, argum
 
 	resource, err := tm.client.PatchApplicationResource(ctx, patchReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -688,7 +734,7 @@ func (tm *ToolManager) handleDeleteApplicationResource(ctx context.Context, argu
 
 	err := tm.client.DeleteApplicationResource(ctx, deleteReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{
@@ -758,17 +804,27 @@ func (tm *ToolManager) handleGetLogs(ctx context.Context, arguments map[string]i
 	// Get logs from the client
 	entries, err := tm.client.GetApplicationLogs(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
+
+	// ArgoCD's log stream ends with an empty entry. Counting it made the
+	// header report one line more than it printed, so "no matching lines"
+	// rendered as "1 lines" followed by nothing.
+	entries = dropEmptyLogEntries(entries)
 
 	// Determine truncation status
 	truncated := len(entries) >= client.MaxLogEntries
 
 	// Build compact plain text output: "timestamp pod_name | content"
 	var sb strings.Builder
-	if truncated {
+	switch {
+	case truncated:
 		fmt.Fprintf(&sb, "# %s logs (truncated at %d lines)\n", name, len(entries))
-	} else {
+	case len(entries) == 0 && filter != "":
+		fmt.Fprintf(&sb, "# %s logs (no lines matched filter %q)\n", name, filter)
+	case len(entries) == 0:
+		fmt.Fprintf(&sb, "# %s logs (no lines)\n", name)
+	default:
 		fmt.Fprintf(&sb, "# %s logs (%d lines)\n", name, len(entries))
 	}
 	for _, entry := range entries {
@@ -800,7 +856,7 @@ func (tm *ToolManager) handleGetResourceTree(ctx context.Context, arguments map[
 
 	tree, err := tm.client.GetResourceTree(ctx, name)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// Build a lookup from UID -> node

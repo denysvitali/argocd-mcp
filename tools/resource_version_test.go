@@ -88,3 +88,40 @@ func TestResolveResourceVersionSkipsIncompleteInput(t *testing.T) {
 	assert.Equal(t, "v1", tm.resolveResourceVersion(context.Background(), "app", "apps", "", "ns", ""))
 	assert.False(t, called, "should not query the resource tree without a target")
 }
+
+// TestDescribeMetricsFailure: "install metrics-server" is bad advice
+// when metrics-server is installed and the caller simply cannot read it.
+func TestDescribeMetricsFailure(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		contains string
+	}{
+		{
+			"RBAC denial names the permission",
+			errors.New(`pods.metrics.k8s.io is forbidden: User "sa" cannot list resource "pods"`),
+			"not allowed to read pod metrics",
+		},
+		{
+			"missing API suggests installing metrics-server",
+			errors.New("the server could not find the requested resource"),
+			"install metrics-server",
+		},
+		{
+			"timeout is named",
+			errors.New("context deadline exceeded"),
+			"timed out",
+		},
+		{
+			"anything else is passed through",
+			errors.New("kaboom"),
+			"kaboom",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Contains(t, describeMetricsFailure(tt.err, "ns"), tt.contains)
+		})
+	}
+}

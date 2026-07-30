@@ -13,7 +13,7 @@ import (
 
 func (tm *ToolManager) handleListClusters(ctx context.Context, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
 	server := String(arguments, "server", "")
-	limit := Int(arguments, "limit", MaxListItems)
+	limit := Limit(arguments, "limit", MaxListItems, MaxLimit)
 	query := &cluster.ClusterQuery{}
 	if server != "" {
 		query.Server = server
@@ -21,7 +21,7 @@ func (tm *ToolManager) handleListClusters(ctx context.Context, arguments map[str
 
 	clusters, err := tm.client.ListClusters(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// Apply limit
@@ -49,7 +49,7 @@ func (tm *ToolManager) handleGetCluster(ctx context.Context, arguments map[strin
 
 	c, err := tm.client.GetCluster(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// ConnectionState is deprecated but we need to use it for backward compatibility
@@ -94,7 +94,7 @@ func (tm *ToolManager) handleCreateCluster(ctx context.Context, arguments map[st
 
 	createdCluster, err := tm.client.CreateCluster(ctx, createReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// ConnectionState is deprecated but we need to use it for backward compatibility
@@ -150,7 +150,7 @@ func (tm *ToolManager) handleUpdateCluster(ctx context.Context, arguments map[st
 
 	updatedCluster, err := tm.client.UpdateCluster(ctx, updateReq)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	// ConnectionState is deprecated but we need to use it for backward compatibility
@@ -178,7 +178,7 @@ func (tm *ToolManager) handleDeleteCluster(ctx context.Context, arguments map[st
 
 	err := tm.client.DeleteCluster(ctx, query)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorFromRPC(err), nil
 	}
 
 	return Result(map[string]interface{}{

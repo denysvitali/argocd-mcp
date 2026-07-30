@@ -103,6 +103,11 @@ var writeTools = map[string]bool{
 	toolCreateCluster:            true,
 	toolUpdateCluster:            true,
 	toolCreateApplicationSet:     true,
+	// validate_repository reads nothing back, but ArgoCD authorises it
+	// under "repositories, create": on a read-scoped token it fails with
+	// PermissionDenied, so offering it in read-only mode promises access
+	// the caller does not have.
+	toolValidateRepository: true,
 }
 
 // deleteTools lists tools that destroy resources and require explicit delete permission.

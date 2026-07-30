@@ -3,11 +3,32 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	healthlib "github.com/argoproj/gitops-engine/pkg/health"
 	synccommon "github.com/argoproj/gitops-engine/pkg/sync/common"
+	"github.com/denysvitali/argocd-mcp/internal/client"
 )
+
+// inClusterServer is ArgoCD's address for the cluster it runs in. It is
+// the destination for most applications, so repeating it on every row of
+// a list costs tokens and says nothing.
+const inClusterServer = "https://kubernetes.default.svc"
+
+// dropEmptyLogEntries removes entries carrying no content. ArgoCD
+// terminates a log stream with one, and counting it inflated every line
+// count by one — "no matching lines" rendered as "1 lines" of nothing.
+func dropEmptyLogEntries(entries []client.ApplicationLogEntry) []client.ApplicationLogEntry {
+	kept := make([]client.ApplicationLogEntry, 0, len(entries))
+	for _, entry := range entries {
+		if strings.TrimSpace(entry.Content) == "" {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
+}
 
 // inferResourceVersion infers the Kubernetes API version from the resource group.
 // Most Kubernetes resources use v1. This is a simplified inference that covers
@@ -161,15 +182,26 @@ func formatApplicationSummary(app *v1alpha1.Application) map[string]interface{} 
 				app.Status.OperationState.Phase == synccommon.OperationError)) ||
 		len(app.Status.Conditions) > 0
 
+	// Fields that carry no information are omitted rather than repeated
+	// on every row: across 55 applications, "server: <in-cluster>",
+	// "has_issues: false", "out_of_sync_count: 0" and a successful
+	// operation message accounted for most of the response. Absence is
+	// the default, and the tool description says so.
 	result := map[string]interface{}{
-		"name":              app.Name,
-		"project":           app.Spec.Project,
-		"server":            app.Spec.Destination.Server,
-		"namespace":         app.Spec.Destination.Namespace,
-		"status":            syncStatus,
-		"health":            healthStatus,
-		"out_of_sync_count": outOfSyncCount,
-		"has_issues":        hasIssues,
+		"name":      app.Name,
+		"project":   app.Spec.Project,
+		"namespace": app.Spec.Destination.Namespace,
+		"status":    syncStatus,
+		"health":    healthStatus,
+	}
+	if app.Spec.Destination.Server != "" && app.Spec.Destination.Server != inClusterServer {
+		result["server"] = app.Spec.Destination.Server
+	}
+	if outOfSyncCount > 0 {
+		result["out_of_sync_count"] = outOfSyncCount
+	}
+	if hasIssues {
+		result["has_issues"] = true
 	}
 
 	// Include conditions if present
@@ -177,12 +209,13 @@ func formatApplicationSummary(app *v1alpha1.Application) map[string]interface{} 
 		result["conditions"] = conditions
 	}
 
-	// Include operation info if present
-	if operationPhase != "" {
+	// A succeeded operation is the uninteresting case; its phase and
+	// "successfully synced" message are noise on every healthy row.
+	if operationPhase != "" && operationPhase != string(synccommon.OperationSucceeded) {
 		result["operation_phase"] = operationPhase
-	}
-	if operationMessage != "" {
-		result["operation_message"] = operationMessage
+		if operationMessage != "" {
+			result["operation_message"] = operationMessage
+		}
 	}
 
 	return result
