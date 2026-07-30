@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/argoproj/argo-cd/v3 v3.3.6
-	github.com/argoproj/gitops-engine v0.7.1-0.20251217140045-5baed5604d2d
+	github.com/argoproj/gitops-engine v0.7.3
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/golang/protobuf v1.5.4
 	github.com/modelcontextprotocol/go-sdk v1.7.0
@@ -65,6 +65,7 @@ require (
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
+	github.com/evanphx/json-patch v5.9.11+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
