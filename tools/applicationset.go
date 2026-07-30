@@ -1,3 +1,4 @@
+// Package tools implements the ArgoCD MCP tool definitions and handlers.
 package tools
 
 import (

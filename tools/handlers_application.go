@@ -743,15 +743,15 @@ func (tm *ToolManager) handleGetLogs(ctx context.Context, arguments map[string]i
 	// Build compact plain text output: "timestamp pod_name | content"
 	var sb strings.Builder
 	if truncated {
-		sb.WriteString(fmt.Sprintf("# %s logs (truncated at %d lines)\n", name, len(entries)))
+		fmt.Fprintf(&sb, "# %s logs (truncated at %d lines)\n", name, len(entries))
 	} else {
-		sb.WriteString(fmt.Sprintf("# %s logs (%d lines)\n", name, len(entries)))
+		fmt.Fprintf(&sb, "# %s logs (%d lines)\n", name, len(entries))
 	}
 	for _, entry := range entries {
 		if entry.Timestamp != "" && entry.PodName != "" {
-			sb.WriteString(fmt.Sprintf("%s %s | %s\n", entry.Timestamp, entry.PodName, entry.Content))
+			fmt.Fprintf(&sb, "%s %s | %s\n", entry.Timestamp, entry.PodName, entry.Content)
 		} else if entry.PodName != "" {
-			sb.WriteString(fmt.Sprintf("%s | %s\n", entry.PodName, entry.Content))
+			fmt.Fprintf(&sb, "%s | %s\n", entry.PodName, entry.Content)
 		} else {
 			sb.WriteString(entry.Content)
 			sb.WriteByte('\n')

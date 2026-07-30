@@ -1595,8 +1595,8 @@ func TestBuildClusterConfig(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		assert.True(t, config.TLSClientConfig.Insecure)
-		assert.Equal(t, []byte("ca-cert-data"), config.TLSClientConfig.CAData)
+		assert.True(t, config.Insecure)
+		assert.Equal(t, []byte("ca-cert-data"), config.CAData)
 	})
 
 	t.Run("with username password", func(t *testing.T) {

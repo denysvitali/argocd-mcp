@@ -168,7 +168,7 @@ func (tm *ToolManager) handleDeleteHook(ctx context.Context, arguments map[strin
 	// Find matching hooks in the resource tree
 	var hooks []HookInfo
 	for _, node := range tree.Nodes {
-		if node.ResourceRef.Name != hookName {
+		if node.Name != hookName {
 			continue
 		}
 		// Check if this node is a hook by looking at its info items
@@ -187,14 +187,14 @@ func (tm *ToolManager) handleDeleteHook(ctx context.Context, arguments map[strin
 			continue
 		}
 		// If a namespace filter was provided, apply it
-		if namespace != "" && node.ResourceRef.Namespace != namespace {
+		if namespace != "" && node.Namespace != namespace {
 			continue
 		}
 		hooks = append(hooks, HookInfo{
-			Name:      node.ResourceRef.Name,
-			Namespace: node.ResourceRef.Namespace,
-			Group:     node.ResourceRef.Group,
-			Kind:      node.ResourceRef.Kind,
+			Name:      node.Name,
+			Namespace: node.Namespace,
+			Group:     node.Group,
+			Kind:      node.Kind,
 			HookType:  nodeHookType,
 		})
 	}

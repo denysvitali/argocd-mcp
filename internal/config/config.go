@@ -1,3 +1,5 @@
+// Package config loads argocd-mcp configuration from defaults, a config
+// file and environment variables.
 package config
 
 import (

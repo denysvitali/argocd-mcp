@@ -283,7 +283,7 @@ func (tm *ToolManager) fetchUnhealthyPodLogs(ctx context.Context, appName string
 			label = podName + " (previous/crashed)"
 		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("=== Pod: %s (ns: %s) ===\n", label, ns))
+		fmt.Fprintf(&sb, "=== Pod: %s (ns: %s) ===\n", label, ns)
 		for _, entry := range entries {
 			sb.WriteString(entry.Content)
 			sb.WriteByte('\n')
@@ -720,32 +720,32 @@ func buildNextActions(r DiagnosticReport) []string {
 func buildDiagnosticSummary(r DiagnosticReport) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("Application %q is %s (health: %s, sync: %s)",
-		r.Application, strings.ToUpper(string(r.Severity)), r.HealthStatus, r.SyncStatus))
+	fmt.Fprintf(&sb, "Application %q is %s (health: %s, sync: %s)",
+		r.Application, strings.ToUpper(string(r.Severity)), r.HealthStatus, r.SyncStatus)
 
 	if r.CurrentRevision != "" {
-		sb.WriteString(fmt.Sprintf(", currently at revision %s", shortSHA(r.CurrentRevision)))
+		fmt.Fprintf(&sb, ", currently at revision %s", shortSHA(r.CurrentRevision))
 	}
 	sb.WriteString(". ")
 
 	if len(r.OutOfSyncResources) > 0 {
-		sb.WriteString(fmt.Sprintf("%d resource(s) are out-of-sync with Git: %s. ",
-			len(r.OutOfSyncResources), strings.Join(r.OutOfSyncResources, ", ")))
+		fmt.Fprintf(&sb, "%d resource(s) are out-of-sync with Git: %s. ",
+			len(r.OutOfSyncResources), strings.Join(r.OutOfSyncResources, ", "))
 	}
 
 	if len(r.UnhealthyResources) > 0 {
-		sb.WriteString(fmt.Sprintf("%d resource(s) are unhealthy: %s. ",
-			len(r.UnhealthyResources), strings.Join(r.UnhealthyResources, ", ")))
+		fmt.Fprintf(&sb, "%d resource(s) are unhealthy: %s. ",
+			len(r.UnhealthyResources), strings.Join(r.UnhealthyResources, ", "))
 	}
 
 	if len(r.RootCauses) == 0 {
 		sb.WriteString("No specific root cause signals were identified from available data sources.")
 	} else {
-		sb.WriteString(fmt.Sprintf("%d root cause signal(s) identified. Top signal: %s",
-			len(r.RootCauses), r.RootCauses[0].Signal))
+		fmt.Fprintf(&sb, "%d root cause signal(s) identified. Top signal: %s",
+			len(r.RootCauses), r.RootCauses[0].Signal)
 		if r.RootCauses[0].Detail != "" {
 			excerpt := truncateString(r.RootCauses[0].Detail, 200)
-			sb.WriteString(fmt.Sprintf(" (%s)", excerpt))
+			fmt.Fprintf(&sb, " (%s)", excerpt)
 		}
 		sb.WriteString(".")
 	}
@@ -828,16 +828,16 @@ func extractErrorLines(logs string, maxLines int) []string {
 // that a user or LLM can paste directly into an MCP call.
 func yamlToolCall(toolName string, args map[string]interface{}) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("tool: %s\n", toolName))
+	fmt.Fprintf(&sb, "tool: %s\n", toolName)
 	sb.WriteString("args:\n")
 	for k, v := range args {
 		switch val := v.(type) {
 		case bool:
-			sb.WriteString(fmt.Sprintf("  %s: %t\n", k, val))
+			fmt.Fprintf(&sb, "  %s: %t\n", k, val)
 		case int, int64:
-			sb.WriteString(fmt.Sprintf("  %s: %v\n", k, val))
+			fmt.Fprintf(&sb, "  %s: %v\n", k, val)
 		default:
-			sb.WriteString(fmt.Sprintf("  %s: %q\n", k, fmt.Sprintf("%v", val)))
+			fmt.Fprintf(&sb, "  %s: %q\n", k, fmt.Sprintf("%v", val))
 		}
 	}
 	return sb.String()

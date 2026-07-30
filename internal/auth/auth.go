@@ -1,3 +1,5 @@
+// Package auth handles ArgoCD authentication: token storage, login flows
+// and the OIDC/SSO browser handshake.
 package auth
 
 import (
@@ -115,22 +117,22 @@ func MaskToken(token string) string {
 	return token[:4] + "****" + token[len(token)-4:]
 }
 
-// Print success message
+// PrintSuccess prints a green check-marked success message.
 func PrintSuccess(msg string) {
 	fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("✓ ") + msg)
 }
 
-// Print error message
+// PrintError prints a red cross-marked error message.
 func PrintError(msg string) {
 	fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render("✗ ") + msg)
 }
 
-// Print info message
+// PrintInfo prints a blue arrow-marked informational message.
 func PrintInfo(msg string) {
 	fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("→ ") + msg)
 }
 
-// Print warning message
+// PrintWarn prints a yellow warning message.
 func PrintWarn(msg string) {
 	fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("⚠ ") + msg)
 }

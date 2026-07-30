@@ -1,11 +1,17 @@
+# golangci-lint v2 configuration. The v1 schema (no `version` key,
+# `linters-settings`, gofmt under `linters`) is rejected outright by v2.
+version: "2"
+
 linters:
-  disable:
-    - errcheck  # Pre-existing issues, not introduced by this PR
+  default: none
   enable:
     - govet
     - staticcheck
-    - gofmt
+  settings:
+    staticcheck:
+      # SA1019 is handled by //lint:ignore directives for CI's staticcheck.
+      checks: ["all", "-SA1019"]
 
-linters-settings:
-  staticcheck:
-    checks: ["all", "-SA1019"]  # SA1019 is handled by //lint:ignore directives for CI's staticcheck
+formatters:
+  enable:
+    - gofmt

@@ -1,3 +1,4 @@
+// Package client wraps the ArgoCD API client used by the MCP tools.
 package client
 
 import (
