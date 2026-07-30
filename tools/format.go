@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
@@ -39,6 +40,40 @@ func inferResourceVersion(group string) string {
 	// For custom groups (like postgresql.cnpg.io), also default to v1
 	// as most CRDs use v1
 	return "v1"
+}
+
+// resolveResourceVersion determines the API version to address a resource
+// with. It prefers the version ArgoCD reports for that resource in the
+// application's resource tree, which is authoritative, and only falls back
+// to guessing from the group.
+//
+// The guess is wrong for any CRD not served at v1 — e.g. an
+// actions.github.com/v1alpha1 AutoscalingRunnerSet, which the API rejects
+// with "could not find the requested resource" — so anything addressable
+// in the tree should be resolved from it.
+func (tm *ToolManager) resolveResourceVersion(ctx context.Context, appName, group, kind, namespace, resourceName string) string {
+	if appName == "" || kind == "" || resourceName == "" {
+		return inferResourceVersion(group)
+	}
+
+	tree, err := tm.client.GetResourceTree(ctx, appName)
+	if err != nil || tree == nil {
+		return inferResourceVersion(group)
+	}
+
+	for _, node := range tree.Nodes {
+		if node.Kind != kind || node.Name != resourceName || node.Group != group {
+			continue
+		}
+		if namespace != "" && node.Namespace != namespace {
+			continue
+		}
+		if node.Version != "" {
+			return node.Version
+		}
+	}
+
+	return inferResourceVersion(group)
 }
 
 // parseEvents converts interface{} to []interface{} with proper type handling

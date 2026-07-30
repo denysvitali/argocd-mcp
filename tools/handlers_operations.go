@@ -145,7 +145,11 @@ type HookInfo struct {
 	Namespace string `json:"namespace"`
 	Group     string `json:"group"`
 	Kind      string `json:"kind"`
-	HookType  string `json:"hook_type"`
+	// Version is the API version ArgoCD reports for the hook in the
+	// resource tree. It is authoritative; guessing it from the group is
+	// wrong for any CRD not served at v1.
+	Version  string `json:"version"`
+	HookType string `json:"hook_type"`
 }
 
 // handleDeleteHook finds and deletes hook resources from an application's resource tree
@@ -195,6 +199,7 @@ func (tm *ToolManager) handleDeleteHook(ctx context.Context, arguments map[strin
 			Namespace: node.Namespace,
 			Group:     node.Group,
 			Kind:      node.Kind,
+			Version:   node.Version,
 			HookType:  nodeHookType,
 		})
 	}
@@ -222,7 +227,10 @@ func (tm *ToolManager) handleDeleteHook(ctx context.Context, arguments map[strin
 	var results []hookDeleteResult
 	forceDelete := true
 	for _, hook := range hooks {
-		version := inferResourceVersion(hook.Group)
+		version := hook.Version
+		if version == "" {
+			version = inferResourceVersion(hook.Group)
+		}
 		deleteReq := &application.ApplicationResourceDeleteRequest{
 			Name:         &appName,
 			ResourceName: &hook.Name,

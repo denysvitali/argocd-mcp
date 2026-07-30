@@ -254,6 +254,10 @@ func applicationToolDefinitions() []mcp.Tool {
 						"type":        "string",
 						"description": "Resource name (required)",
 					},
+					"version": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource API version (e.g., v1, v1alpha1). Optional: resolved from the application's resource tree when omitted.",
+					},
 				},
 				Required: []string{"name", "kind", "resource_name"},
 			},
@@ -283,6 +287,10 @@ func applicationToolDefinitions() []mcp.Tool {
 					"resource_name": map[string]interface{}{
 						"type":        "string",
 						"description": "Resource name",
+					},
+					"version": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource API version (e.g., v1, v1alpha1). Optional: resolved from the application's resource tree when omitted.",
 					},
 					"action": map[string]interface{}{
 						"type":        "string",
@@ -318,6 +326,10 @@ func applicationToolDefinitions() []mcp.Tool {
 						"type":        "string",
 						"description": "Resource name (required)",
 					},
+					"version": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource API version (e.g., v1, v1alpha1). Optional: resolved from the application's resource tree when omitted.",
+					},
 				},
 				Required: []string{"name", "kind", "resource_name"},
 			},
@@ -347,6 +359,10 @@ func applicationToolDefinitions() []mcp.Tool {
 					"resource_name": map[string]interface{}{
 						"type":        "string",
 						"description": "Resource name (required)",
+					},
+					"version": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource API version (e.g., v1, v1alpha1). Optional: resolved from the application's resource tree when omitted.",
 					},
 					"patch": map[string]interface{}{
 						"type":        "string",
@@ -385,6 +401,10 @@ func applicationToolDefinitions() []mcp.Tool {
 					"resource_name": map[string]interface{}{
 						"type":        "string",
 						"description": "Resource name (required)",
+					},
+					"version": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource API version (e.g., v1, v1alpha1). Optional: resolved from the application's resource tree when omitted.",
 					},
 					"force": map[string]interface{}{
 						"type":        "boolean",

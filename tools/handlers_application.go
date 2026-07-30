@@ -470,8 +470,12 @@ func (tm *ToolManager) handleListResourceActions(ctx context.Context, arguments 
 	namespacePtr := &namespace
 	resourceNamePtr := &resourceName
 
-	// Determine the API version from the group
-	version := inferResourceVersion(group)
+	// Prefer an explicit version, then the one ArgoCD reports for this
+	// resource; guessing from the group only works for v1 groups.
+	version := String(arguments, "version", "")
+	if version == "" {
+		version = tm.resolveResourceVersion(ctx, name, group, kind, namespace, resourceName)
+	}
 	versionPtr := &version
 
 	query := &application.ApplicationResourceRequest{
@@ -520,10 +524,19 @@ func (tm *ToolManager) handleRunResourceAction(ctx context.Context, arguments ma
 	resourceNamePtr := &resourceName
 	actionPtr := &action
 
+	// Prefer an explicit version, then the one ArgoCD reports for this
+	// resource; guessing from the group only works for v1 groups.
+	version := String(arguments, "version", "")
+	if version == "" {
+		version = tm.resolveResourceVersion(ctx, name, group, kind, namespace, resourceName)
+	}
+	versionPtr := &version
+
 	actionReq := &application.ResourceActionRunRequestV2{
 		Name:         namePtr,
 		Group:        groupPtr,
 		Kind:         kindPtr,
+		Version:      versionPtr,
 		Namespace:    namespacePtr,
 		ResourceName: resourceNamePtr,
 		Action:       actionPtr,
@@ -553,9 +566,12 @@ func (tm *ToolManager) handleGetApplicationResource(ctx context.Context, argumen
 	namespacePtr := &namespace
 	resourceNamePtr := &resourceName
 
-	// Determine the API version from the group
-	// Most Kubernetes resources use v1, but we should allow override
-	version := inferResourceVersion(group)
+	// Prefer an explicit version, then the one ArgoCD reports for this
+	// resource; guessing from the group only works for v1 groups.
+	version := String(arguments, "version", "")
+	if version == "" {
+		version = tm.resolveResourceVersion(ctx, name, group, kind, namespace, resourceName)
+	}
 	versionPtr := &version
 
 	resourceReq := &application.ApplicationResourceRequest{
@@ -599,8 +615,12 @@ func (tm *ToolManager) handlePatchApplicationResource(ctx context.Context, argum
 	patchPtr := &patch
 	patchTypePtr := &patchType
 
-	// Determine the API version from the group
-	version := inferResourceVersion(group)
+	// Prefer an explicit version, then the one ArgoCD reports for this
+	// resource; guessing from the group only works for v1 groups.
+	version := String(arguments, "version", "")
+	if version == "" {
+		version = tm.resolveResourceVersion(ctx, name, group, kind, namespace, resourceName)
+	}
 	versionPtr := &version
 
 	patchReq := &application.ApplicationResourcePatchRequest{
@@ -647,8 +667,12 @@ func (tm *ToolManager) handleDeleteApplicationResource(ctx context.Context, argu
 	forcePtr := &force
 	orphanPtr := &orphan
 
-	// Determine the API version from the group
-	version := inferResourceVersion(group)
+	// Prefer an explicit version, then the one ArgoCD reports for this
+	// resource; guessing from the group only works for v1 groups.
+	version := String(arguments, "version", "")
+	if version == "" {
+		version = tm.resolveResourceVersion(ctx, name, group, kind, namespace, resourceName)
+	}
 	versionPtr := &version
 
 	deleteReq := &application.ApplicationResourceDeleteRequest{
