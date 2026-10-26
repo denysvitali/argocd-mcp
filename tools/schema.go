@@ -75,7 +75,7 @@ func structProperties(t reflect.Type) (map[string]*propertySchema, []string) {
 
 // propertyFor maps a Go type to its JSON-schema property.
 func propertyFor(t reflect.Type) *propertySchema {
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch t.Kind() {

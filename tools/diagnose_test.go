@@ -40,11 +40,8 @@ func makeDegradedApp(name string) *v1alpha1.Application {
 			Source: &v1alpha1.ApplicationSource{TargetRevision: targetRevision},
 		},
 		Status: v1alpha1.ApplicationStatus{
-			Health: v1alpha1.AppHealthStatus{
-				Status:  healthlib.HealthStatusDegraded,
-				Message: "Deployment has timed out waiting for rollout to complete",
-			},
-			Sync: v1alpha1.SyncStatus{Status: v1alpha1.SyncStatusCodeSynced, Revision: "def5678"},
+			Health: v1alpha1.AppHealthStatus{Status: healthlib.HealthStatusDegraded},
+			Sync:   v1alpha1.SyncStatus{Status: v1alpha1.SyncStatusCodeSynced, Revision: "def5678"},
 		},
 	}
 }

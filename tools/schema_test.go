@@ -6,15 +6,16 @@ import (
 )
 
 type testArgs struct {
-	Name       string            `json:"name" desc:"Application name (required)" required:"true"`
-	Limit      int               `json:"limit" desc:"Maximum items"`
-	Prune      bool              `json:"prune" desc:"Prune resources"`
-	Cost       float64           `json:"cost"`
-	Repos      []string          `json:"repos" desc:"Allowed repositories"`
-	Refresh    string            `json:"refresh" enum:"normal,hard"`
-	Dest       testDestination   `json:"dest"`
-	DestList   []testDestination `json:"dest_list"`
-	unexported string            //nolint:unused // verifies unexported fields are skipped
+	Name     string            `json:"name" desc:"Application name (required)" required:"true"`
+	Limit    int               `json:"limit" desc:"Maximum items"`
+	Prune    bool              `json:"prune" desc:"Prune resources"`
+	Cost     float64           `json:"cost"`
+	Repos    []string          `json:"repos" desc:"Allowed repositories"`
+	Refresh  string            `json:"refresh" enum:"normal,hard"`
+	Dest     testDestination   `json:"dest"`
+	DestList []testDestination `json:"dest_list"`
+	//lint:ignore U1000 verifies unexported fields are skipped
+	unexported string //nolint:unused // verifies unexported fields are skipped
 }
 
 type testDestination struct {
